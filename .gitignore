@@ -18,7 +18,7 @@
 # everything that is a markdown 
 !*.md
 # everything that is a txt
-!*.txt
+# !*.txt
 !*.py 
 !*.pkl
 !*.png

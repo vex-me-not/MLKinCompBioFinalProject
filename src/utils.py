@@ -1,5 +1,6 @@
 import scanpy as sc
 from abc_atlas_access.abc_atlas_cache.abc_project_cache import AbcProjectCache
+import warnings
 
 
 def download_data(
@@ -7,7 +8,8 @@ def download_data(
         brain_parts,
         directories_to_use,
         metadata_to_use,
-        log2=True
+        log2=True,
+        verbose=True
     ):
     """
     Download data from the ABC Atlas project cache.
@@ -26,35 +28,43 @@ def download_data(
         If True, download log2 transformed data; otherwise, download raw data.
         Default is True.
     """
+    warnings.filterwarnings("ignore")
     abc_cache = AbcProjectCache.from_cache_dir(download_base)
-    
-    print("Current manifest is ", abc_cache.current_manifest)
-    print("All available manifests: ", abc_cache.list_manifest_file_names)
+
+    if verbose:
+        print("Current manifest is ", abc_cache.current_manifest)
+        print("All available manifests: ", abc_cache.list_manifest_file_names)
 
     abc_cache.load_manifest("releases/20230630/manifest.json")
-    print("We will be using manifest :", abc_cache.current_manifest)
-    print("All available data directories: ", abc_cache.list_directories)
-    print("Directories to be used: ", directories_to_use)
+
+    if verbose:
+        print("We will be using manifest :", abc_cache.current_manifest)
+        print("All available data directories: ", abc_cache.list_directories)
+        print("Directories to be used: ", directories_to_use)
 
     for directory in directories_to_use:
+        if verbose:
+            print(
+                f"All available data files of {directory} directory: "
+                f"{abc_cache.list_data_files(directory)}"
+            )
+
+    if verbose:
         print(
-            f"All available data files of {directory} directory: "
-            f"{abc_cache.list_data_files(directory)}"
+            "Metadata to be used: ",
+            f"{abc_cache.list_metadata_files(metadata_to_use)}"
         )
+        print("Downloading the metadata\n")
 
-    print(
-        "Metadata to be used:", abc_cache.list_metadata_files(metadata_to_use)
-    )
-
-    print("Downloading the metadata\n")
     abc_cache.get_directory_metadata(metadata_to_use)
 
     for directory in directories_to_use:
         for brain_part in brain_parts:
-            print(
-                f"Dowloading the {directory} "
-                f"data file for brain part: {brain_part}"
-            )
+            if verbose:
+                print(
+                    f"Dowloading the {directory} "
+                    f"data file for brain part: {brain_part}"
+                )
 
             if log2:
                 fname = directory + "-" + brain_part + "/log2"

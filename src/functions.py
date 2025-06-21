@@ -1,5 +1,6 @@
 import scanpy as sc
 import pandas as pd
+import numpy as np
 import anndata
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -37,3 +38,13 @@ def download_data(brain_parts,directories_to_use,metadata_to_use):
 
             fname= directory + '-' + brain_part + '/log2'
             abc_cache.get_data_path(directory=directory, file_name=fname)
+
+
+def find_outliers(series):
+    
+    Q1 = series.quantile(0.25)
+    Q3 = series.quantile(0.75)
+    
+    IQR = Q3 - Q1
+    
+    return (series < (Q1 - 1.5 * IQR)) | (series > (Q3 + 1.5 * IQR))

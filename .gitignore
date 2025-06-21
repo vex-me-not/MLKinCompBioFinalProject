@@ -19,7 +19,12 @@
 !*.md
 # everything that is a txt
 # !*.txt
+!requirements.txt
 !functions.py 
 !*.pkl
 !*.png
 # Add anything that you should be included but it's not
+
+
+# Ignore the following
+.env/

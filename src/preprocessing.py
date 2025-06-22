@@ -2,6 +2,7 @@ import scanpy as sc
 import numpy as np
 import anndata as ad
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 
 def describe_adata(adata):
@@ -116,3 +117,47 @@ def tsne_compare(
     del a1_subset
     del a2_subset
     del adata_combined
+
+
+def qc_inspect(
+        adata_mem,
+        n_top_genes=2000,
+    ):
+    # qc metrics
+    sc.pp.calculate_qc_metrics(adata_mem, inplace=True)
+
+    # violin plots
+    sc.pl.violin(
+        adata_mem,
+        keys=[
+            "n_genes_by_counts",
+            "total_counts",
+            "pct_counts_in_top_100_genes"
+        ],
+        groupby="anatomical_division_label",
+        jitter=0.4,
+        stripplot=False
+    )
+
+    # boxplot
+    sns.boxplot(
+        data=adata_mem.obs,
+        x="anatomical_division_label",
+        y="n_genes_by_counts"
+    )
+
+    # highly variable genes
+    sc.pp.highly_variable_genes(
+        adata_mem, flavor="seurat", n_top_genes=n_top_genes
+    )
+    sc.pl.highly_variable_genes(adata_mem)
+
+    # scatter plot of total counts vs pct counts in top 100 genes
+    sc.pl.scatter(
+        adata_mem,
+        x="total_counts",
+        y="pct_counts_in_top_100_genes",
+    )
+
+    # delete the adata_mem object to free memory
+    del adata_mem

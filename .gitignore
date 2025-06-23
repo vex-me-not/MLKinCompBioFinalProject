@@ -8,7 +8,8 @@
 !*/
 
 # EXCEPT
-# !*.csv
+!rncv_summary_results.csv
+!baseline_accuracy_summary.csv
 # the .gitignore file
 !.gitignore
 # everything that is a jupyter notebook 

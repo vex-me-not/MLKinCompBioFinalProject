@@ -16,7 +16,7 @@ import lightgbm as lgb
 from pathlib import Path
 from abc_atlas_access.abc_atlas_cache.abc_project_cache import AbcProjectCache
 
-from pathlib import Path
+from tqdm.notebook import tqdm
 from sklearn.base import BaseEstimator, TransformerMixin
 from optuna.pruners import MedianPruner
 from sklearn.linear_model import LogisticRegression
@@ -30,7 +30,7 @@ from sklearn.impute import IterativeImputer
 from sklearn.preprocessing import LabelEncoder,RobustScaler,PowerTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.decomposition import PCA
-from sklearn.model_selection import StratifiedKFold,train_test_split
+from sklearn.model_selection import StratifiedKFold,train_test_split,cross_val_predict
 from sklearn.metrics import matthews_corrcoef, roc_auc_score, balanced_accuracy_score,f1_score, precision_score, recall_score, confusion_matrix, average_precision_score,accuracy_score
 from scipy import stats
 
@@ -153,7 +153,7 @@ class rnCV():
     used to get the results of the pipeline in a dataframe.
     """
     # the constructor of the class. Notice that we don't have to give x and y, just the dataset
-    def __init__(self,data_df,estimators,params,r=10,n=5,k=3,random_state=42):
+    def __init__(self,data_df,estimators,params,r=4,n=5,k=3,random_state=42):
         self.R=r
         self.N=n
         self.K=k
@@ -237,7 +237,7 @@ class rnCV():
         
 
         study=optuna.create_study(direction='maximize',study_name=model_name)
-        study.optimize(objective, n_trials=60,timeout=180.0,callbacks=[EarlyStopping(patience=10)])
+        study.optimize(objective, n_trials=10,timeout=100.0,callbacks=[EarlyStopping(patience=4)])
         
         return study.best_params        
 
@@ -328,7 +328,7 @@ class rnCV():
             
 
         study=optuna.create_study(direction='maximize',study_name="Winner:"+winner)
-        study.optimize(objective, n_trials=60,timeout=180.0,callbacks=[EarlyStopping(patience=10)])
+        study.optimize(objective, n_trials=10,timeout=100.0,callbacks=[EarlyStopping(patience=4)])
             
         return study.best_params
 
@@ -341,9 +341,9 @@ def perform_rnCV(path):
     # we define the estimators to be used
     estimators = {
         'LogisticRegression': LogisticRegression,
-        'GaussianNB': GaussianNB,
+        # 'GaussianNB': GaussianNB,
         'LDA': LinearDiscriminantAnalysis,
-        'SVM': SVC,
+        # 'SVM': SVC,
         'RandomForest': RandomForestClassifier,
         'LightGBM': lgb.LGBMClassifier
     }
@@ -353,32 +353,32 @@ def perform_rnCV(path):
         'LogisticRegression': lambda trial: {
             'penalty': trial.suggest_categorical('penalty', ['l1', 'l2', 'elasticnet']),
             'solver': trial.suggest_categorical('solver', ['saga']),
-            'C': trial.suggest_float('C', 1e-3, 1e0, log=True),
-            'l1_ratio': trial.suggest_uniform('l1_ratio', 0, 1)
+            'C': trial.suggest_categorical('C', [1e-3,1e-2,1e-1]),
+            'l1_ratio': trial.suggest_categorical('l1_ratio', [0.25,0.5,0.75])
         },
-        'GaussianNB': lambda trial: {'var_smoothing': trial.suggest_float('var_smoothing', 1e-2, 1e-1, log=True)},
-        'LDA': lambda trial: {'solver':trial.suggest_categorical('solver', ['svd', 'lsqr', 'eigen']),
-                              'tol':trial.suggest_float('tol', 5*1e-2, 1e-1, log=True)},
-        'SVM': lambda trial: {
-            'C': trial.suggest_float('C', 5*1e-2, 1e2, log=True),
-            'kernel': trial.suggest_categorical('kernel', ['linear', 'rbf', 'poly']),
-            'probability': trial.suggest_categorical('probability', [True])
-        },
+        # 'GaussianNB': lambda trial: {'var_smoothing': trial.suggest_categorical('var_smoothing', [1e-2,5*1e-2,1e-1])},
+        'LDA': lambda trial: {'solver':trial.suggest_categorical('solver', ['svd']),
+                              'tol':trial.suggest_categorical('tol', [1e-2,5*1e-2,1e-1,])},
+        # 'SVM': lambda trial: {
+        #     'C': trial.suggest_categorical('C', [1e-2,5*1e-2,1e-1]),
+        #     'kernel': trial.suggest_categorical('kernel', ['linear', 'rbf']),
+        #     'probability': trial.suggest_categorical('probability', [True])
+        # },
         'RandomForest': lambda trial: {
-            'n_estimators': trial.suggest_int('n_estimators', 100, 500),
-            'max_depth': trial.suggest_int('max_depth', 5, 15),
-            'min_samples_split': trial.suggest_int('min_samples_split', 2, 10)
+            'n_estimators': trial.suggest_categorical('n_estimators', [100,250,500]),
+            'max_depth': trial.suggest_categorical('max_depth', [5,10,15]),
+            'min_samples_split': trial.suggest_categorical('min_samples_split', [2,5,10])
         },
         'LightGBM': lambda trial: {
-            'n_estimators': trial.suggest_int('n_estimators', 100, 500),
-            'max_depth': trial.suggest_int('max_depth', 5, 15),
-            'learning_rate': trial.suggest_float('learning_rate', 1e-3, 1e-1, log=True),
+            'n_estimators': trial.suggest_categorical('n_estimators', [100,250,500]),
+            'max_depth': trial.suggest_categorical('max_depth', [5,10,15]),
+            'learning_rate': trial.suggest_categorical('learning_rate',[1e-3,1e-2,1e-1]),
             'verbosity': trial.suggest_categorical('verbosity', [-1])
         }
     }
 
     # we initialize a rnCV class instance and we run_rnCV
-    rncv=rnCV(data_df=df, estimators=estimators,params=param_spaces, r=10, n=5, k=3, random_state=42)
+    rncv=rnCV(data_df=df, estimators=estimators,params=param_spaces, r=4, n=5, k=3, random_state=42)
     results=rncv.run_rnCV()
 
     # we summarize and save the results in a dataframe
@@ -386,6 +386,57 @@ def perform_rnCV(path):
     summary.to_csv('../data/rncv_summary_results.csv')
 
     print("Summary:\n", summary)
+
+# method used to tune the final winner model that we got through rnCV
+def winner_tuning(df:pd.DataFrame,winner):
+    # we define our estimators, same as the ones we used in rnCV
+    estimators = {
+        'LogisticRegression': LogisticRegression,
+        # 'GaussianNB': GaussianNB,
+        'LDA': LinearDiscriminantAnalysis,
+        # 'SVM': SVC,
+        'RandomForest': RandomForestClassifier,
+        'LightGBM': lgb.LGBMClassifier
+    }
+
+    # we define the hyperparameter spaces, same as the ones we used in rnCV
+    param_spaces = {
+        'LogisticRegression': lambda trial: {
+            'penalty': trial.suggest_categorical('penalty', ['l1', 'l2', 'elasticnet']),
+            'solver': trial.suggest_categorical('solver', ['saga']),
+            'C': trial.suggest_categorical('C', [1e-2,1e-1, 1e0]),
+            'l1_ratio': trial.suggest_categorical('l1_ratio', [0.25,0.5,0.75])
+        },
+        # 'GaussianNB': lambda trial: {'var_smoothing': trial.suggest_categorical('var_smoothing', [1e-2,5*1e-2,1e-1])},
+        'LDA': lambda trial: {'solver':trial.suggest_categorical('solver', ['svd']),
+                              'tol':trial.suggest_categorical('tol', [1e-2,5*1e-2,1e-1,])},
+        # 'SVM': lambda trial: {
+        #     'C': trial.suggest_categorical('C', [1e-2,5*1e-2,1e-1]),
+        #     'kernel': trial.suggest_categorical('kernel', ['linear', 'rbf']),
+        #     'probability': trial.suggest_categorical('probability', [True])
+        # },
+        'RandomForest': lambda trial: {
+            'n_estimators': trial.suggest_categorical('n_estimators', [100,250,500]),
+            'max_depth': trial.suggest_categorical('max_depth', [5,10,15]),
+            'min_samples_split': trial.suggest_categorical('min_samples_split', [2,5,10])
+        },
+        'LightGBM': lambda trial: {
+            'n_estimators': trial.suggest_categorical('n_estimators', [100,250,500]),
+            'max_depth': trial.suggest_categorical('max_depth', [5,10,15]),
+            'learning_rate': trial.suggest_categorical('learning_rate',[1e-3,1e-2,1e-1]),
+            'verbosity': trial.suggest_categorical('verbosity', [-1])
+        }
+    }
+
+    # we initialize a rnCV class instance
+    rncv=rnCV(data_df=df, estimators=estimators,params=param_spaces, r=4, n=5, k=3, random_state=42)
+    winner_estim=estimators[winner] # we get the actual estimator, not just his name
+    winner_params=rncv.tune_winner(winner=winner) # and we use rnCV tune_winner to tune it
+
+    print(f'For model {winner} the best parameters are {winner_params}') # we print the best parameters for clarity
+
+    return winner_estim(**winner_params)
+
 
 # method used to clean the data. The title is a tad misleading, as there are also slivers of data exploration as well
 def clean_data(data:pd.DataFrame):
@@ -748,55 +799,7 @@ def replace_column(df:pd.DataFrame,to_be_replaced,to_be_added):
     
     return data_df  
 
-# method used to tune the final winner model that we got through rnCV
-def winner_tuning(df:pd.DataFrame,winner):
-    # we define our estimators, same as the ones we used in rnCV
-    estimators = {
-        'LogisticRegression': LogisticRegression,
-        'GaussianNB': GaussianNB,
-        'LDA': LinearDiscriminantAnalysis,
-        'SVM': SVC,
-        'RandomForest': RandomForestClassifier,
-        'LightGBM': lgb.LGBMClassifier
-    }
 
-    # we define the hyperparameter spaces, same as the ones we used in rnCV
-    param_spaces = {
-        'LogisticRegression': lambda trial: {
-            'penalty': trial.suggest_categorical('penalty', ['l1', 'l2', 'elasticnet']),
-            'solver': trial.suggest_categorical('solver', ['saga']),
-            'C': trial.suggest_float('C', 1e-3, 1e0, log=True),
-            'l1_ratio': trial.suggest_uniform('l1_ratio', 0, 1)
-        },
-        'GaussianNB': lambda trial: {'var_smoothing': trial.suggest_float('var_smoothing', 1e-2, 1e-1, log=True)},
-        'LDA': lambda trial: {'solver':trial.suggest_categorical('solver', ['svd', 'lsqr', 'eigen']),
-                              'tol':trial.suggest_float('tol', 5*1e-2, 1e-1, log=True)},
-        'SVM': lambda trial: {
-            'C': trial.suggest_float('C', 5*1e-2, 1e2, log=True),
-            'kernel': trial.suggest_categorical('kernel', ['linear', 'rbf', 'poly']),
-            'probability': trial.suggest_categorical('probability', [True])
-        },
-        'RandomForest': lambda trial: {
-            'n_estimators': trial.suggest_int('n_estimators', 100, 500),
-            'max_depth': trial.suggest_int('max_depth', 5, 15),
-            'min_samples_split': trial.suggest_int('min_samples_split', 2, 10)
-        },
-        'LightGBM': lambda trial: {
-            'n_estimators': trial.suggest_int('n_estimators', 100, 500),
-            'max_depth': trial.suggest_int('max_depth', 5, 15),
-            'learning_rate': trial.suggest_float('learning_rate', 1e-3, 1e-1, log=True),
-            'verbosity': trial.suggest_categorical('verbosity', [-1])
-        }
-    }
-
-    # we initialize a rnCV class instance
-    rncv=rnCV(data_df=df, estimators=estimators,params=param_spaces, r=10, n=5, k=3, random_state=42)
-    winner_estim=estimators[winner] # we get the actual estimator, not just his name
-    winner_params=rncv.tune_winner(winner=winner) # and we use rnCV tune_winner to tune it
-
-    print(f'For model {winner} the best parameters are {winner_params}') # we print the best parameters for clarity
-
-    return winner_estim(**winner_params)
 
 
 # method used to print the confidence interval of bootstrapping as actual intervals of a single metric
@@ -1121,6 +1124,58 @@ def produce_df(hy_path,th_path,verbose=False):
     del adata_combined,X,y
 
     return X_df
+
+def get_best_model(path):
+    df=pd.read_csv(path)
+
+    X,y=keep_features(data_df=df,target='class',to_drop='gene_identifier')
+
+    models = {
+        'LDA': LinearDiscriminantAnalysis(tol=0.1),
+        'LogisticRegression': LogisticRegression(max_iter=1000),
+        'RandomForest': RandomForestClassifier(n_estimators=100),
+        'LightGBM': lgb.LGBMClassifier(verbosity=-1)
+    }
+
+    # Set up CV
+    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+
+    # Store results
+    metrics_summary = []
+
+    for name in tqdm(models, desc="Evaluating models"):
+        model = models[name]
+
+        # Predict class labels with CV
+        y_pred = cross_val_predict(model, X, y, cv=cv, method='predict', n_jobs=-1)
+
+        # Predict probabilities with CV (for ROC_AUC, PR_AUC, NPV, specificity)
+        y_prob = cross_val_predict(model, X, y, cv=cv, method='predict_proba', n_jobs=-1)[:, 1]
+
+        # Confusion matrix for Specificity and NPV
+        tn, fp, fn, tp = confusion_matrix(y, y_pred).ravel()
+
+        specificity = tn / (tn + fp) if (tn + fp) > 0 else 0
+        npv = tn / (tn + fn) if (tn + fn) > 0 else 0
+
+        metrics = {
+            'Model': name,
+            'MCC': matthews_corrcoef(y, y_pred),
+            'ROC_AUC': roc_auc_score(y, y_prob),
+            'Balanced_Accuracy': balanced_accuracy_score(y, y_pred),
+            'F1': f1_score(y, y_pred),
+            'Recall': recall_score(y, y_pred),
+            'Precision': precision_score(y, y_pred),
+            'Specificity': specificity,
+            'NPV': npv,
+            'PR_AUC': average_precision_score(y, y_prob)
+        }
+
+        metrics_summary.append(metrics)
+        print(f"{name}: Done")
+
+    df_results = pd.DataFrame(metrics_summary)
+    df_results.to_csv("simple_model_metrics_summary.csv", index=False)
 
 # -----------------TO DO--------------------
 

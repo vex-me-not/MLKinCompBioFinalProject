@@ -1,419 +1,394 @@
-# import scanpy as sc
-# import numpy as np
-# import pandas as pd
-
-# from sklearn.cluster import DBSCAN
-# from sklearn.metrics import calinski_harabasz_score
-
-# import optuna
-# from optuna.distributions import IntDistribution, FloatDistribution
-
-# import tqdm
-
-# from typing import Optional
-
-
-# class ClusteringOptimization:
-
-#     def __init__(
-#             self,
-#             adata: sc.AnnData,
-#             genes_to_clust: tuple[str, Optional[int]] = ("top", 2_000),
-#             max_value_scale: int = 10,
-#             tune_dbscan: bool = True,
-#             tune_leiden: bool = True,
-#             tune_neighbors: bool = True,
-#             dbscan_params: Optional[dict[str, int]] = None,
-#             leiden_params: Optional[dict[str, float]] = None,
-#             neighbors_params: Optional[dict[str, int]] = None
-#         ):
-#         self.adata = adata
-#         self.genes_to_clust = genes_to_clust[0]
-#         self.n_genes_to_clust = genes_to_clust[1]
-#         self.max_value_scale = max_value_scale
-#         self.tune_dbscan = tune_dbscan
-#         self.tune_leiden = tune_leiden
-#         self.tune_neighbors = tune_neighbors
-#         if not dbscan_params:
-#             dbscan_params = {
-#                 "eps": (1, 6),
-#                 "min_samples": (1, 100)
-#             }
-#         else:
-#             self.dbscan_params = dbscan_params
-#         if not leiden_params:
-#             leiden_params = {
-#                 "resolution": (0.1, 1.0)
-#             }
-#         else:
-#             self.leiden_params = leiden_params
-#         if not neighbors_params:
-#             neighbors_params = {
-#                 "n_neighbors": (5, 50)
-#             }
-#         else:
-#             self.neighbors_params = neighbors_params
-
-#     def _define_hyperparameters(self):
-#         r = {}
-#         if self.tune_dbscan:
-#             r["dbscan__eps"] = FloatDistribution(
-#                 low=self.dbscan_params["eps"][0],
-#                 high=self.dbscan_params["eps"][1],
-#                 log=False,
-#             )
-#             r["dbscan__min_samples"] = IntDistribution(
-#                 low=self.dbscan_params["min_samples"][0],
-#                 high=self.dbscan_params["min_samples"][1],
-#                 log=False,
-#             )
-#         if self.tune_leiden:
-#             r["leiden__resolution"] = FloatDistribution(
-#                 low=self.leiden_params["resolution"][0],
-#                 high=self.leiden_params["resolution"][1],
-#                 log=False,
-#             )
-#         if self.tune_neighbors:
-#             ["neighbors__n_neighbors"] = IntDistribution(
-#                 low=self.neighbors_params["n_neighbors"][0],
-#                 high=self.neighbors_params["n_neighbors"][1],
-#                 log=True,
-#             )
-#         if len(r) == 0:
-#             raise ValueError("No hyperparameters defined for optimization.")
-#         return r
-
-#     def _objective(self):
-#         # optimize based on: chi = calinski_harabasz_score(X, labels)
-#         pass
-
-import scanpy as sc
 import numpy as np
-import pandas as pd
+import scanpy as sc
 import matplotlib.pyplot as plt
-
 from sklearn.cluster import DBSCAN
-from sklearn.metrics import calinski_harabasz_score
-
-import optuna
-
-from typing import Optional, Dict, Tuple, Any
-
-# Suppress verbose Optuna logging
-optuna.logging.set_verbosity(optuna.logging.WARNING)
+from tqdm import tqdm
+import gc
+from sklearn.metrics import (
+    calinski_harabasz_score, silhouette_score, davies_bouldin_score
+)
 
 
-class ClusteringOptimization:
-    """
-    A class to streamline and optimize scRNA-seq clustering using Optuna.
 
-    This class encapsulates the preprocessing, clustering (DBSCAN noise removal + Leiden),
-    and hyperparameter tuning steps for single-cell analysis. It uses the
-    Calinski-Harabasz score as the optimization metric to find the best set of
-    parameters for `n_neighbors`, DBSCAN's `eps` and `min_samples`, and
-    Leiden's `resolution`.
-
-    Args:
-        adata (sc.AnnData): The annotated data matrix.
-        genes_to_clust (Tuple[str, Optional[int]]): Method and number of genes for
-            clustering. E.g., ("top", 2000) for top 2000 highly variable genes.
-        max_value_scale (int): The value to clip at during `sc.pp.scale`.
-        n_pcs (Optional[int]): Number of principal components to use. If None, it
-            will be determined automatically by finding the 'elbow'.
-        tune_dbscan (bool): If True, tune DBSCAN parameters (`eps`, `min_samples`).
-        tune_leiden (bool): If True, tune Leiden parameter (`resolution`).
-        tune_neighbors (bool): If True, tune the number of neighbors (`n_neighbors`).
-        dbscan_params (Optional[Dict[str, Tuple[float, float]]]): Search range for DBSCAN
-            parameters. Keys: 'eps', 'min_samples'.
-        leiden_params (Optional[Dict[str, Tuple[float, float]]]): Search range for
-            Leiden's resolution. Key: 'resolution'.
-        neighbors_params (Optional[Dict[str, Tuple[int, int]]]): Search range for
-            the number of neighbors. Key: 'n_neighbors'.
-    """
-
-    def __init__(
-        self,
-        adata: sc.AnnData,
-        genes_to_clust: Tuple[str, Optional[int]] = ("top", 2000),
-        max_value_scale: int = 10,
-        n_pcs: Optional[int] = None,
-        tune_dbscan: bool = True,
-        tune_leiden: bool = True,
-        tune_neighbors: bool = True,
-        dbscan_params: Optional[Dict[str, Tuple[float, float]]] = None,
-        leiden_params: Optional[Dict[str, Tuple[float, float]]] = None,
-        neighbors_params: Optional[Dict[str, Tuple[int, int]]] = None
+def evaluate_dbscan_clustering(
+        embedding: np.ndarray,
+        labels: np.ndarray
     ):
-        self.initial_adata = adata.copy()
-        self.genes_to_clust = genes_to_clust[0]
-        self.n_genes_to_clust = genes_to_clust[1]
-        self.max_value_scale = max_value_scale
-        self.n_pcs = n_pcs
+    """Evaluate DBSCAN clustering using Calinski-Harabasz, Silhouette, and
+    Davies-Bouldin scores.
 
-        self.tune_dbscan = tune_dbscan
-        self.tune_leiden = tune_leiden
-        self.tune_neighbors = tune_neighbors
+    Parameters
+    ----------
+    embedding : np.ndarray
+        The embedding of the data points.
+    labels : np.ndarray
+        The cluster labels assigned by DBSCAN.
 
-        # --- Set hyperparameter search spaces with defaults ---
-        self.dbscan_params = dbscan_params if dbscan_params is not None else {
-            "eps": (0.5, 5.0),
-            "min_samples": (5, 50)
+    Returns
+    -------
+    dict
+        A dictionary containing the scores for Calinski-Harabasz, Silhouette,
+        and Davies-Bouldin metrics.
+    """
+    if len(set(labels)) < 2:
+        return {'calinski_harabasz': -1, 'silhouette': -1, 'davies_bouldin': -1}
+
+    mask = labels != -1
+    if mask.sum() < 2:
+        return {'calinski_harabasz': -1, 'silhouette': -1, 'davies_bouldin': -1}
+
+    embedding_clean = embedding[mask]
+    labels_clean = labels[mask]
+
+    try:
+        ch_score = calinski_harabasz_score(embedding_clean, labels_clean)
+        sil_score = silhouette_score(embedding_clean, labels_clean)
+        db_score = davies_bouldin_score(embedding_clean, labels_clean)
+    except:
+        return {'calinski_harabasz': -1, 'silhouette': -1, 'davies_bouldin': -1}
+
+    return {
+        'calinski_harabasz': ch_score,
+        'silhouette': sil_score,
+        'davies_bouldin': db_score  # Raw, not inverted yet
+    }
+
+
+def plot_parameter_optimization(
+        eps_values: list,
+        min_pts_values: list,
+        score_matrices: dict,
+        n_clusters_matrix: np.ndarray,
+        noise_percentage_matrix: np.ndarray,
+        embedding_method: str
+    ):
+    """Plot heatmaps for different scoring metrics, number of clusters, and
+    noise percentage.
+
+    Parameters
+    ----------
+    eps_values : list
+        List of epsilon values used in DBSCAN.
+    min_pts_values : list
+        List of minimum samples values used in DBSCAN.
+    score_matrices : dict
+        Dictionary containing matrices for Calinski-Harabasz, Silhouette,
+        Davies-Bouldin, and Composite scores.
+    n_clusters_matrix : np.ndarray
+        Matrix containing the number of clusters for each combination of
+        epsilon and minimum samples.
+    noise_percentage_matrix : np.ndarray
+        Matrix containing the percentage of noise points for each combination
+        of epsilon and minimum samples.
+    embedding_method : str
+        The embedding method used (e.g., 'pca', 'tsne', 'umap').
+    """
+    
+    # Organize all plots and their respective matrices, titles, and colormaps
+    plot_data = [
+        {
+            "matrix": score_matrices["calinski_harabasz"],
+            "title": "Calinski-Harabasz Score",
+            "cmap": "bone"
+        },
+        {
+            "matrix": score_matrices["silhouette"],
+            "title": "Silhouette Score",
+            "cmap": "bone"
+        },
+        {
+            "matrix": score_matrices["davies_bouldin"],
+            "title": "Davies-Bouldin Score (adj)",
+            "cmap": "bone"
+        },
+        {
+            "matrix": score_matrices["composite"],
+            "title": "Composite Score",
+            "cmap": "bone"
+        },
+        {
+            "matrix": n_clusters_matrix,
+            "title": "Number of Clusters",
+            "cmap": "bone"
+        },
+        {
+            "matrix": noise_percentage_matrix,
+            "title": "Percentage of Noise Points",
+            "cmap": "bone"
         }
-        self.leiden_params = leiden_params if leiden_params is not None else {
-            "resolution": (0.1, 1.0)
-        }
-        self.neighbors_params = neighbors_params if neighbors_params is not None else {
-            "n_neighbors": (5, 50)
-        }
+    ]
+    
+    num_plots = len(plot_data)
+    rows = int(np.ceil(num_plots / 3))
+    cols = min(num_plots, 3)
 
-        self.study: Optional[optuna.Study] = None
-        self.processed_adata: Optional[sc.AnnData] = None
+    fig, axes = plt.subplots(rows, cols, figsize=(7 * cols, 6 * rows))
+    axes = axes.ravel()
 
-    def _find_elbow_pcs(self, variance_ratio: np.ndarray, n_points_to_fit: int = 5) -> int:
-        """Heuristically finds the 'elbow' in the PCA variance ratio plot."""
-        # It finds the point with the maximum distance to a line drawn
-        # from the first to the last point of the curve.
-        y = variance_ratio
-        x = np.arange(len(y))
+    fig.suptitle(
+        f"DBSCAN Parameter Optimization ({embedding_method.upper()} Embedding)",
+        fontsize=16
+    )
 
-        # Line from first to last point
-        line_vec = np.array([x[-1] - x[0], y[-1] - y[0]])
-        line_vec_norm = line_vec / np.sqrt(np.sum(line_vec**2))
+    for idx, data in enumerate(plot_data):
+        im = axes[idx].imshow(
+            data["matrix"], cmap=data["cmap"], aspect="auto", origin="lower"
+        )
+        axes[idx].set_xlabel("eps")
+        axes[idx].set_ylabel("min_samples")
+        axes[idx].set_title(data["title"])
 
-        # Vector from first point to all other points
-        vec_from_first = np.array([x - x[0], y - y[0]]).T
-
-        # Project vectors onto the line's normal
-        # The distance is the length of the projection onto the normal vector
-        normal_vec = np.array([-line_vec_norm[1], line_vec_norm[0]])
-        dist_from_line = np.abs(np.dot(vec_from_first, normal_vec))
-
-        # The elbow is the point with the maximum distance
-        elbow_index = np.argmax(dist_from_line)
-        # Return as 1-based count
-        return elbow_index + 1
-
-
-    def _preprocess_data(self):
-        """
-        Runs the initial preprocessing steps: HVG selection, scaling, and PCA.
-        This is done once before the optimization starts.
-        """
-        print("--- Starting Preprocessing ---")
-        adata = self.initial_adata.copy()
-
-        print(f"Finding top {self.n_genes_to_clust} highly variable genes...")
-        sc.pp.highly_variable_genes(adata, n_top_genes=self.n_genes_to_clust, flavor="seurat")
-        adata = adata[:, adata.var.highly_variable].copy()
-
-        print("Scaling data...")
-        sc.pp.scale(adata, max_value=self.max_value_scale)
-
-        print("Performing PCA...")
-        sc.tl.pca(adata, svd_solver='arpack')
-
-        if self.n_pcs is None:
-            print("Automatically determining number of PCs...")
-            self.n_pcs = self._find_elbow_pcs(adata.uns['pca']['variance_ratio'])
-            print(f"Found elbow at {self.n_pcs} PCs.")
-
-        self.processed_adata = adata
-        print("--- Preprocessing Complete ---")
-
-    def _define_hyperparameter_space(self, trial: optuna.Trial) -> Dict[str, Any]:
-        """Defines the hyperparameter search space for Optuna."""
-        params = {}
-        if self.tune_dbscan:
-            params["eps"] = trial.suggest_float(
-                "dbscan__eps", self.dbscan_params["eps"][0], self.dbscan_params["eps"][1]
-            )
-            params["min_samples"] = trial.suggest_int(
-                "dbscan__min_samples", self.dbscan_params["min_samples"][0], self.dbscan_params["min_samples"][1]
-            )
-        if self.tune_leiden:
-            params["resolution"] = trial.suggest_float(
-                "leiden__resolution", self.leiden_params["resolution"][0], self.leiden_params["resolution"][1]
-            )
-        if self.tune_neighbors:
-            params["n_neighbors"] = trial.suggest_int(
-                "neighbors__n_neighbors", self.neighbors_params["n_neighbors"][0], self.neighbors_params["n_neighbors"][1], log=True
-            )
-
-        if not params:
-            raise ValueError("No hyperparameters selected for tuning. Set at least one 'tune_*' flag to True.")
-
-        return params
-
-    def _objective(self, trial: optuna.Trial) -> float:
-        """
-        The objective function for Optuna optimization.
-
-        For a given trial, it runs the clustering pipeline and returns the
-        Calinski-Harabasz score.
-        """
-        params = self._define_hyperparameter_space(trial)
-        adata_trial = self.processed_adata.copy()
-
-        # Use PCA embedding up to the determined number of PCs
-        embedding = adata_trial.obsm["X_pca"][:, :self.n_pcs]
-
-        # --- 1. DBSCAN Noise Filtering ---
-        db = DBSCAN(
-            eps=params.get("eps", 2.0), # Default if not tuning
-            min_samples=params.get("min_samples", 15) # Default if not tuning
-        ).fit(embedding)
-        labels = db.labels_
-
-        # Create a mask for non-noise points
-        non_noise_mask = labels != -1
-
-        # If all points are noise or less than 2 cells remain, it's a bad run
-        if np.sum(non_noise_mask) < 2:
-            return 0.0
-
-        adata_filtered = adata_trial[non_noise_mask].copy()
-
-        # --- 2. Leiden Clustering on Filtered Data ---
-        # Recompute neighbors on the filtered data
-        sc.pp.neighbors(
-            adata_filtered,
-            n_neighbors=params.get("n_neighbors", 15), # Default if not tuning
-            n_pcs=self.n_pcs
+        # Set ticks
+        eps_tick_indices = np.arange(
+            0, len(eps_values), max(1, len(eps_values) // 5)
+        )
+        min_pts_tick_indices = np.arange(
+            0, len(min_pts_values), max(1, len(min_pts_values) // 5)
         )
 
-        # Run Leiden
-        sc.tl.leiden(
-            adata_filtered,
-            resolution=params.get("resolution", 0.4), # Default if not tuning
-            flavor="igraph",
-            n_iterations=2,
-            directed=False
+        axes[idx].set_xticks(eps_tick_indices)
+        axes[idx].set_xticklabels(
+            [f"{eps_values[i]:.1f}" for i in eps_tick_indices]
+        )
+        axes[idx].set_yticks(min_pts_tick_indices)
+        axes[idx].set_yticklabels(
+            [f"{min_pts_values[i]}" for i in min_pts_tick_indices]
         )
 
-        leiden_labels = adata_filtered.obs["leiden"]
+        plt.colorbar(im, ax=axes[idx])
 
-        # Calinski-Harabasz score is undefined for 1 cluster.
-        if len(set(leiden_labels)) < 2:
-            return 0.0
+    for i in range(num_plots, len(axes)):
+        fig.delaxes(axes[i])
 
-        # --- 3. Evaluate Clustering ---
-        # The score should be calculated on the same data that was clustered
-        filtered_embedding = adata_filtered.obsm["X_pca"][:, :self.n_pcs]
-        score = calinski_harabasz_score(filtered_embedding, leiden_labels)
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    plt.show()
 
-        return score
 
-    def run_optimization(self, n_trials: int = 100, storage: Optional[str] = None, study_name: Optional[str] = None):
-        """
-        Runs the full Optuna optimization study.
+def run_dbscan_opt(
+        adata: sc.AnnData,
+        n_neighbors: int,
+        elbow: int,
+        min_pts_values: list,
+        eps_values: list,
+        noise_threshold_penalize: int,
+        noise_threshold_discard: int,
+        seed: int
+    ):
+    sc.pp.neighbors(adata, n_neighbors=n_neighbors, n_pcs=elbow)
+    sc.tl.tsne(adata, random_state=seed)
+    sc.tl.umap(adata, random_state=seed)
 
-        Args:
-            n_trials (int): The number of optimization trials to run.
-            storage (Optional[str]): Database URL for study storage (e.g., 'sqlite:///db.sqlite3').
-            study_name (Optional[str]): Name for the study, required for distributed optimization.
-        """
-        if self.processed_adata is None:
-            self._preprocess_data()
+    embedding_results = {}
 
-        self.study = optuna.create_study(
-            direction="maximize",
-            study_name=study_name,
-            storage=storage,
-            load_if_exists=True
+    for embedding_method in ["pca", "tsne", "umap"]:
+        print(
+            f"\nRunning DBSCAN optimization with {embedding_method} "
+            "embeddings..."
         )
 
-        print(f"\n--- Running Optuna Optimization for {n_trials} trials ---")
-        self.study.optimize(self._objective, n_trials=n_trials, show_progress_bar=True)
+        if embedding_method == "pca":
+            embedding = adata.obsm["X_pca"][:, :elbow]
+        elif embedding_method == "tsne":
+            embedding = adata.obsm["X_tsne"]
+        elif embedding_method == "umap":
+            embedding = adata.obsm["X_umap"]
 
-        print("\n--- Optimization Complete ---")
-        print(f"Best trial number: {self.study.best_trial.number}")
-        print(f"Best Score (Calinski-Harabasz): {self.study.best_value:.4f}")
-        print("Best Parameters:")
-        for key, value in self.study.best_params.items():
-            print(f"  {key}: {value:.4f}" if isinstance(value, float) else f"  {key}: {value}")
+        score_matrices = {
+            "calinski_harabasz": np.zeros(
+                (len(min_pts_values), len(eps_values))
+            ),
+            "silhouette": np.zeros(
+                (len(min_pts_values), len(eps_values))
+            ),
+            "davies_bouldin": np.zeros(
+                (len(min_pts_values), len(eps_values))
+            ),
+            "composite": np.zeros(
+                (len(min_pts_values), len(eps_values))
+            )
+        }
 
-    def get_best_params(self) -> Dict[str, Any]:
-        """Returns the best hyperparameters found by the study."""
-        if self.study is None:
-            raise RuntimeError("Optimization has not been run yet. Call `run_optimization()` first.")
-        return self.study.best_params
+        n_clusters_matrix = np.zeros((len(min_pts_values), len(eps_values)))
+        n_noise_matrix = np.zeros((len(min_pts_values), len(eps_values)))
+        noise_percentage_matrix = np.zeros(
+            (len(min_pts_values), len(eps_values))
+        )
 
-    def apply_best_params(self) -> sc.AnnData:
-        """
-        Applies the best found parameters to the data and returns the final AnnData object.
+        for i, min_pts in tqdm(
+            enumerate(min_pts_values),
+            desc=f"Optimizing {embedding_method.upper()}",
+            total=len(min_pts_values),
+            bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}"
+        ):
+            for j, eps in enumerate(eps_values):
+                db = DBSCAN(eps=eps, min_samples=min_pts).fit(embedding)
+                labels = db.labels_
 
-        This method re-runs the pipeline with the optimal parameters and saves the
-        resulting clustering and UMAP coordinates to the original `adata` object.
-        """
-        if self.study is None:
-            raise RuntimeError("Optimization has not been run yet. Call `run_optimization()` first.")
+                n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
+                n_noise = list(labels).count(-1)
+                noise_percentage = (n_noise / len(labels)) * 100
 
-        print("\n--- Applying Optimal Parameters to Data ---")
-        best_params = self.get_best_params()
+                n_clusters_matrix[i, j] = n_clusters
+                n_noise_matrix[i, j] = n_noise
+                noise_percentage_matrix[i, j] = noise_percentage
 
-        # Start with a fresh copy of the initial data
-        final_adata = self.initial_adata.copy()
+                scores = evaluate_dbscan_clustering(embedding, labels)
+                for metric in [
+                    "calinski_harabasz", "silhouette", "davies_bouldin"
+                ]:
+                    score_matrices[metric][i, j] = scores[metric]
 
-        # Re-run preprocessing
-        print("1. Re-running preprocessing...")
-        sc.pp.highly_variable_genes(final_adata, n_top_genes=self.n_genes_to_clust, flavor="seurat")
-        final_adata = final_adata[:, final_adata.var.highly_variable].copy()
-        sc.pp.scale(final_adata, max_value=self.max_value_scale)
-        sc.tl.pca(final_adata, svd_solver="arpack")
+                # Garbage collection to manage memory usage
+                del db
+                del labels
+                del n_clusters
+                del n_noise
+                del scores
+                gc.collect()
+            gc.collect()
 
-        embedding = final_adata.obsm["X_pca"][:, :self.n_pcs]
+        # Dynamic normalization after grid search:
+        norm_score_matrices = {}
+        for metric in ["calinski_harabasz", "silhouette", "davies_bouldin"]:
+            matrix = score_matrices[metric]
+            if metric == "davies_bouldin":
+                matrix = -matrix  # Invert so higher is better
+            min_val = np.min(matrix)
+            max_val = np.max(matrix)
+            if max_val - min_val == 0:
+                norm_matrix = np.zeros_like(matrix)
+            else:
+                norm_matrix = (matrix - min_val) / (max_val - min_val)
+            norm_score_matrices[metric] = norm_matrix
 
-        # 2. Run DBSCAN with optimal parameters to find noise
-        print("2. Filtering noise with optimal DBSCAN parameters...")
+        # Composite with noise penalty
+        noise_penalty = np.maximum(
+            0, (noise_percentage_matrix - noise_threshold_penalize) / 100
+        )
+        composite_matrix = (
+            0.33 * norm_score_matrices["calinski_harabasz"] +
+            0.33 * norm_score_matrices["silhouette"] +
+            0.33 * norm_score_matrices["davies_bouldin"] -
+            noise_penalty
+        )
+        score_matrices["composite"] = composite_matrix
+
+        # Discard configurations with excessive noise
+        composite_matrix[noise_percentage_matrix > noise_threshold_discard] = -1
+
+        # Plot normalized metrics and composite, and the new cluster/noise plots
+        plot_parameter_optimization(
+            eps_values, min_pts_values,
+            score_matrices,
+            n_clusters_matrix,
+            noise_percentage_matrix,
+            embedding_method
+        )
+
+        print(
+            f"\nOptimal parameters for {embedding_method.upper()} "
+            "based on composite score:"
+        )
+        best_idx = np.unravel_index(
+            np.argmax(score_matrices["composite"]), composite_matrix.shape
+        )
+        best_min_pts = min_pts_values[best_idx[0]]
+        best_eps = eps_values[best_idx[1]]
+        best_score = composite_matrix[best_idx[0], best_idx[1]]
+        best_n_clusters = n_clusters_matrix[best_idx[0], best_idx[1]]
+        best_n_noise = n_noise_matrix[best_idx[0], best_idx[1]]
+        best_noise_pct = noise_percentage_matrix[best_idx[0], best_idx[1]]
+
+        gc.collect()
+
+        print(f"  eps: {best_eps:.2f}")
+        print(f"  min_samples: {best_min_pts}")
+        print(f"  Composite Score: {best_score:.3f}")
+        print(f"  Number of clusters: {int(best_n_clusters)}")
+        print(f"  Noise points: {int(best_n_noise)} ({best_noise_pct:.1f}%)")
+
+        embedding_results[embedding_method] = {
+            "eps": best_eps,
+            "min_samples": best_min_pts,
+            "composite_score": best_score,
+            "n_clusters": best_n_clusters,
+            "noise_percentage": best_noise_pct
+        }
+
+        # Apply optimal clustering and label cells
+        print(f"\nApplying optimal DBSCAN clustering for {embedding_method}...")
         db_optimal = DBSCAN(
-            eps=best_params.get("dbscan__eps", 2.0),
-            min_samples=best_params.get("dbscan__min_samples", 15)
+            eps=best_eps, min_samples=best_min_pts
         ).fit(embedding)
+        adata.obs[
+            f"dbscan_{embedding_method}"
+        ] = db_optimal.labels_.astype(str)
+        adata.obs[
+            f"dbscan_{embedding_method}"
+        ] = adata.obs[f"dbscan_{embedding_method}"].replace("-1", "Noise")
 
-        non_noise_mask = db_optimal.labels_ != -1
-        final_adata.obs["dbscan_labels"] = [f"Cluster {l}" if l != -1 else "Noise" for l in db_optimal.labels_]
+        final_noise_pct = (
+            list(db_optimal.labels_).count(-1) / len(db_optimal.labels_)
+        ) * 100
+        if final_noise_pct > 50:
+            print(
+                f"WARN: {final_noise_pct:.1f}% of cells classified as noise. "
+                "Consider:"
+            )
+            print("  - Adjusting parameter ranges")
+            print("  - Using different preprocessing")
+            print("  - This embedding may not be suitable for DBSCAN")
 
-        print(f"   Removed {(~non_noise_mask).sum()} noise points.")
-        print(f"   Retained {non_noise_mask.sum()} cells for final clustering.")
+        if hasattr(adata, 'obsm') and f"X_umap" in adata.obsm:
+            sc.pl.umap(
+                adata,
+                color=[f"dbscan_{embedding_method}"],
+                title=f"DBSCAN on {embedding_method.upper()} "
+                "(eps={best_eps:.2f}, min_samples={best_min_pts})",
+                show=True
+            )
+        else:
+            print(
+                f"Skipping UMAP plot for {embedding_method} as X_umap is not "
+                "available in adata.obsm."
+            )
 
-        # Create filtered dataset
-        adata_filtered = final_adata[non_noise_mask].copy()
+        gc.collect()
 
-        # 3. Re-compute neighbors and run Leiden on filtered data
-        print("3. Running Leiden clustering on noise-filtered data...")
-        sc.pp.neighbors(
-            adata_filtered,
-            n_neighbors=best_params.get("neighbors__n_neighbors", 15),
-            n_pcs=self.n_pcs
+    print("\n" + "="*60)
+    print("FINAL SUMMARY AND RECOMMENDATIONS:")
+    print("="*60)
+    print("\nEmbedding Comparison:")
+    print(
+        f"{'Method':<8} {'Composite Score':<15} {'Clusters':<10} "
+        f"{'Noise %':<8} {'eps':<6} {'min_samples':<12}"
+    )
+    print("-" * 70)
+
+    best_method = None
+    best_composite_score = -np.inf
+
+    for method, results in embedding_results.items():
+        print(
+            f"{method.upper():<8} {results['composite_score']:<15.3f} "
+            f"{results['n_clusters']:<10} {results['noise_percentage']:<8.1f} "
+            f"{results['eps']:<6.2f} {results['min_samples']:<12}"
         )
-        sc.tl.leiden(
-            adata_filtered,
-            resolution=best_params.get("leiden__resolution", 0.4),
-            flavor="igraph"
-        )
+        if results['composite_score'] > best_composite_score:
+            best_composite_score = results['composite_score']
+            best_method = method
 
-        # 4. Transfer results back to the main AnnData object
-        print("4. Finalizing results...")
-        final_adata.obs["optimized_leiden"] = "Filtered_Out_Noise"
-        final_adata.obs.loc[non_noise_mask, "optimized_leiden"] = adata_filtered.obs["leiden"].values
+    print(
+        f"\nRECOMMENDED: {best_method.upper()} embedding with composite score "
+        f"{best_composite_score:.3f}"
+    )
 
-        # 5. Compute UMAP for visualization
-        print("5. Computing UMAP...")
-        # First on the full data to see noise
-        sc.pp.neighbors(final_adata, n_pcs=self.n_pcs)
-        sc.tl.umap(final_adata)
-        # Then on the filtered data for a cleaner view
-        sc.tl.umap(adata_filtered)
+    print("\nGuidelines:")
+    print("1. Choose the embedding with the highest composite score")
+    print("2. Ensure noise percentage is reasonable (typically < 30-40%)")
+    print("3. Visually inspect the clustering results")
+    print("4. Validate with biological knowledge of your cell types")
+    print("5. Consider the number of clusters relative to expected cell types")
 
-        # Store the filtered UMAP coordinates in the main object for plotting
-        final_adata.obsm["X_umap_filtered"] = np.full((final_adata.n_obs, 2), np.nan)
-        final_adata.obsm["X_umap_filtered"][non_noise_mask] = adata_filtered.obsm["X_umap"]
-
-        print("\n--- Final AnnData object is ready ---")
-        print("Results are stored in:")
-        print("  - `adata.obs['dbscan_labels']`: Noise classification from DBSCAN.")
-        print("  - `adata.obs['optimized_leiden']`: Final Leiden clusters after noise removal.")
-        print("  - `adata.obsm['X_umap']`: UMAP on all cells.")
-        print("  - `adata.obsm['X_umap_filtered']`: UMAP on non-noise cells only.")
-
-        return final_adata
+    print("\nOptimization complete.")
+    gc.collect()

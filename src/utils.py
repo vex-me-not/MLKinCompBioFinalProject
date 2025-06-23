@@ -1,4 +1,5 @@
 import scanpy as sc
+import numpy as np
 from abc_atlas_access.abc_atlas_cache.abc_project_cache import AbcProjectCache
 import warnings
 
@@ -97,3 +98,41 @@ def load_data(data_path, backed=None):
             "Unsupported file format. Please provide a .h5ad file."
         )
     return adata
+
+
+def find_elbow_pcs(variance_ratio):
+    """
+    Heuristically finds the 'elbow' in the PCA variance ratio plot.
+
+    The elbow is the point furthest from the line connecting the first and last
+    points in the variance ratio array. This point indicates the optimal number
+    of principal components to retain, balancing explained variance and model
+    complexity.
+
+    Parameters
+    ----------
+    variance_ratio : np.ndarray
+        An array of variance ratios from PCA, typically the explained variance
+        for each principal component.
+
+    Returns
+    -------
+    int
+        The index of the elbow point in the variance ratio array, indicating
+        the optimal number of principal components to retain.
+        The index is returned as a 1-based index.
+    """
+    y = variance_ratio
+    x = np.arange(len(y))
+
+    line_vec = np.array([x[-1] - x[0], y[-1] - y[0]])
+    line_vec_norm = line_vec / np.linalg.norm(line_vec)
+
+    vec_from_first = np.array([x - x[0], y - y[0]]).T
+
+    normal_vec = np.array([-line_vec_norm[1], line_vec_norm[0]])
+    dist_from_line = np.abs(np.dot(vec_from_first, normal_vec))
+
+    elbow_index = np.argmax(dist_from_line)
+
+    return elbow_index + 1

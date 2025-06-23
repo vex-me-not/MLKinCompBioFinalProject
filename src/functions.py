@@ -328,7 +328,7 @@ class rnCV():
             
 
         study=optuna.create_study(direction='maximize',study_name="Winner:"+winner)
-        study.optimize(objective, n_trials=10,timeout=100.0,callbacks=[EarlyStopping(patience=4)])
+        study.optimize(objective, n_trials=60,timeout=300.0,callbacks=[EarlyStopping(patience=10)])
             
         return study.best_params
 
@@ -392,9 +392,9 @@ def winner_tuning(df:pd.DataFrame,winner):
     # we define our estimators, same as the ones we used in rnCV
     estimators = {
         'LogisticRegression': LogisticRegression,
-        # 'GaussianNB': GaussianNB,
+        'GaussianNB': GaussianNB,
         'LDA': LinearDiscriminantAnalysis,
-        # 'SVM': SVC,
+        'SVM': SVC,
         'RandomForest': RandomForestClassifier,
         'LightGBM': lgb.LGBMClassifier
     }
@@ -404,32 +404,32 @@ def winner_tuning(df:pd.DataFrame,winner):
         'LogisticRegression': lambda trial: {
             'penalty': trial.suggest_categorical('penalty', ['l1', 'l2', 'elasticnet']),
             'solver': trial.suggest_categorical('solver', ['saga']),
-            'C': trial.suggest_categorical('C', [1e-2,1e-1, 1e0]),
-            'l1_ratio': trial.suggest_categorical('l1_ratio', [0.25,0.5,0.75])
+            'C': trial.suggest_float('C', 1e-3, 1e0, log=True),
+            'l1_ratio': trial.suggest_uniform('l1_ratio', 0, 1)
         },
-        # 'GaussianNB': lambda trial: {'var_smoothing': trial.suggest_categorical('var_smoothing', [1e-2,5*1e-2,1e-1])},
-        'LDA': lambda trial: {'solver':trial.suggest_categorical('solver', ['svd']),
-                              'tol':trial.suggest_categorical('tol', [1e-2,5*1e-2,1e-1,])},
-        # 'SVM': lambda trial: {
-        #     'C': trial.suggest_categorical('C', [1e-2,5*1e-2,1e-1]),
-        #     'kernel': trial.suggest_categorical('kernel', ['linear', 'rbf']),
-        #     'probability': trial.suggest_categorical('probability', [True])
-        # },
+        'GaussianNB': lambda trial: {'var_smoothing': trial.suggest_float('var_smoothing', 1e-2, 1e-1, log=True)},
+        'LDA': lambda trial: {'solver':trial.suggest_categorical('solver', ['svd', 'lsqr', 'eigen']),
+                              'tol':trial.suggest_float('tol', 5*1e-2, 1e-1, log=True)},
+        'SVM': lambda trial: {
+            'C': trial.suggest_float('C', 5*1e-2, 1e2, log=True),
+            'kernel': trial.suggest_categorical('kernel', ['linear', 'rbf', 'poly']),
+            'probability': trial.suggest_categorical('probability', [True])
+        },
         'RandomForest': lambda trial: {
-            'n_estimators': trial.suggest_categorical('n_estimators', [100,250,500]),
-            'max_depth': trial.suggest_categorical('max_depth', [5,10,15]),
-            'min_samples_split': trial.suggest_categorical('min_samples_split', [2,5,10])
+            'n_estimators': trial.suggest_int('n_estimators', 100, 500),
+            'max_depth': trial.suggest_int('max_depth', 5, 15),
+            'min_samples_split': trial.suggest_int('min_samples_split', 2, 10)
         },
         'LightGBM': lambda trial: {
-            'n_estimators': trial.suggest_categorical('n_estimators', [100,250,500]),
-            'max_depth': trial.suggest_categorical('max_depth', [5,10,15]),
-            'learning_rate': trial.suggest_categorical('learning_rate',[1e-3,1e-2,1e-1]),
+            'n_estimators': trial.suggest_int('n_estimators', 100, 500),
+            'max_depth': trial.suggest_int('max_depth', 5, 15),
+            'learning_rate': trial.suggest_float('learning_rate', 1e-3, 1e-1, log=True),
             'verbosity': trial.suggest_categorical('verbosity', [-1])
         }
     }
 
     # we initialize a rnCV class instance
-    rncv=rnCV(data_df=df, estimators=estimators,params=param_spaces, r=4, n=5, k=3, random_state=42)
+    rncv=rnCV(data_df=df, estimators=estimators,params=param_spaces, r=10, n=5, k=3, random_state=42)
     winner_estim=estimators[winner] # we get the actual estimator, not just his name
     winner_params=rncv.tune_winner(winner=winner) # and we use rnCV tune_winner to tune it
 
@@ -836,7 +836,7 @@ def bootstrap_model_intervals(df_dev:pd.DataFrame,df_val:pd.DataFrame, model):
 
     # we get the x and y of the dev set
     x_dev, y_dev=keep_features(data_df=df_dev,target='class',to_drop='gene_identifier')
-    y_dev=encode(y_dev)
+    # y_dev=encode(y_dev)
 
     # we scale and we impute here as to avoid data leakage
     # x_dev=impute(x_dev)
@@ -844,7 +844,7 @@ def bootstrap_model_intervals(df_dev:pd.DataFrame,df_val:pd.DataFrame, model):
 
     # we get the x and y of the val set    
     x_val, y_val=keep_features(data_df=df_val,target='class',to_drop='gene_identifier')
-    y_val=encode(y_val)
+    # y_val=encode(y_val)
 
     # we scale and we impute here as to avoid data leakage
     # x_val=impute(x_val)
@@ -921,7 +921,7 @@ def bootstrap_model_plot(df_dev:pd.DataFrame,df_val:pd.DataFrame, model):
 
     # we get the x and y of the dev set
     x_dev, y_dev=keep_features(data_df=df_dev,target='class',to_drop='gene_identifier')
-    y_dev=encode(y_dev)
+    # y_dev=encode(y_dev)
 
     # we impute and we scale here as to avoid data leakage
     # x_dev=impute(x_dev)
@@ -929,7 +929,7 @@ def bootstrap_model_plot(df_dev:pd.DataFrame,df_val:pd.DataFrame, model):
 
     # we get the x and y of the val set    
     x_val, y_val=keep_features(data_df=df_val,target='class',to_drop='gene_identifier')
-    y_val=encode(y_val)
+    # y_val=encode(y_val)
 
     # we impute and we scale here as to avoid data leakage
     # x_val=impute(x_val)
@@ -1076,7 +1076,7 @@ def top_coefficients_winner(top,names):
     cf_df=get_top_coefficients(top=top,names=names)
     plot_best_coefficients(cf_df=cf_df,top=top)
 
-def produce_df(hy_path,th_path,verbose=False):
+def produce_df(hy_path,th_path,verbose=False,test=False):
     hypothalamus=anndata.read_h5ad(hy_path)
 
     if verbose is True:
@@ -1099,8 +1099,11 @@ def produce_df(hy_path,th_path,verbose=False):
 
     del thalamus,hypothalamus
 
+    state=42
+    if test is True:
+        state=41
     # Set a seed for reproducibility
-    np.random.seed(42)
+    np.random.seed(state)
 
     # Generate a shuffled index
     shuffled_idx = np.random.permutation(adata_combined.n_obs)

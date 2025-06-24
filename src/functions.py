@@ -1232,3 +1232,20 @@ def explain_winner(winner_src,dev_df,val_df,samples_explained,top_k):
     # Dependency plot for top 20
     for i in reversed(inds2):
         shap.dependence_plot(i, shap_values, data_valid.iloc[:samples_explained,:])
+
+
+def get_sexes(area,experiment,metadata_path):
+    
+    metadata_df=pd.read_csv(metadata_path)
+    metadata_df=metadata_df[metadata_df['anatomical_division_label']==area]
+    metadata_df=metadata_df[metadata_df['dataset_label']==experiment]
+    
+    sexes=metadata_df['donor_sex']
+    
+    del metadata_df
+
+    save_path= '../data/'+experiment+'_sexes_'+ area + '.csv'
+    
+    sexes.to_csv(save_path,index=False)
+
+

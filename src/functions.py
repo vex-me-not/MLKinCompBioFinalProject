@@ -6,6 +6,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import warnings
 
+import shap
 import os
 import joblib
 import statsmodels.api as sm
@@ -979,31 +980,31 @@ def save_winner(path,winner,winner_name):
 
     # we get the x and y of the given dataset
     x_full,y_full=keep_features(data_df=df)
-    y_full=encode(y_full)
+    # y_full=encode(y_full)
 
     # we drop the target from the features
-    x_full=df.drop(columns="class")
+    # x_full=df.drop(columns="class")
 
     # we save the features we used so that the pipeline may use them during inference
     feature_columns=x_full.columns.tolist()
     joblib.dump(feature_columns, "../models/feature_columns.pkl")
 
     # the pipeline that handles the scaling and transformation
-    scale_pipeline=Pipeline([
-    ('scaler', RobustScaler()),  
-    ('transformer', PowerTransformer(method='yeo-johnson'))
-    ])
+    # scale_pipeline=Pipeline([
+    # ('scaler', RobustScaler()),  
+    # ('transformer', PowerTransformer(method='yeo-johnson'))
+    # ])
 
     # the pipeline that handles the Imputing
-    preprocessor=Pipeline([
-        ('imputer', IterativeImputer(random_state=42)),  
-        ('scaler', scale_pipeline)                    
-    ])
+    # preprocessor=Pipeline([
+    #     ('imputer', IterativeImputer(random_state=42)),  
+    #     ('scaler', scale_pipeline)                    
+    # ])
 
     # the complete pipeline that will be saved. It includes column selection, preprocessing and the model
     winner_pipeline=Pipeline([
-        ('select_columns',ColumnSelector(columns=feature_columns)),
-        ('preproccesing',preprocessor),
+        # ('select_columns',ColumnSelector(columns=feature_columns)),
+        # ('preproccesing',preprocessor),
         ('model',winner)
     ])
 

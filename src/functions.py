@@ -1191,7 +1191,7 @@ def get_best_model(path):
     df_results.to_csv("simple_model_metrics_summary.csv", index=False)
 
 
-def explain_winner(winner_src,dev_df,val_df):
+def explain_winner(winner_src,dev_df,val_df,samples_explained,top_k):
     # the directory where the winner lies
     models_dir=winner_src
     model_io=IO(models_dir) # this class will handle the loading
@@ -1201,10 +1201,10 @@ def explain_winner(winner_src,dev_df,val_df):
     data,y_train=keep_features(data_df=dev_df)
     data_valid,y_valid=keep_features(data_df=val_df)
     
-    # explain 1000 examples from the validation set
+    # explain samples_explained examples from the validation set
     # each row is an explanation for a sample, and the last column in the base rate of the model
     # the sum of each row is the margin (log odds) output of the model for that sample
-    shap_values = shap.TreeExplainer((winner.named_steps['model']).booster_).shap_values(data_valid.iloc[:1000,:])
+    shap_values = shap.TreeExplainer((winner.named_steps['model']).booster_).shap_values(data_valid.iloc[:samples_explained,:])
     shap_values.shape
     
     # compute the global importance of each feature as the mean absolute value
@@ -1214,8 +1214,8 @@ def explain_winner(winner_src,dev_df,val_df):
     # make a bar chart that shows the global importance of the top 20 features
     inds = np.argsort(-global_importances)
     f = plt.figure(figsize=(5,10))
-    y_pos = np.arange(20)
-    inds2 = np.flip(inds[:20], 0)
+    y_pos = np.arange(top_k)
+    inds2 = np.flip(inds[:top_k], 0) # top 20
     plt.barh(y_pos, global_importances[inds2], align='center', color="#1E88E5")
     plt.yticks(y_pos, fontsize=13)
     plt.gca().set_yticklabels(data.columns[inds2])
@@ -1227,8 +1227,8 @@ def explain_winner(winner_src,dev_df,val_df):
 
     plt.show()
 
-    shap.summary_plot(shap_values, data_valid.iloc[:1000,:])
+    shap.summary_plot(shap_values, data_valid.iloc[:samples_explained,:])
 
     # Dependency plot for top 20
     for i in reversed(inds2):
-        shap.dependence_plot(i, shap_values, data_valid.iloc[:1000,:])
+        shap.dependence_plot(i, shap_values, data_valid.iloc[:samples_explained,:])

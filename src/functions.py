@@ -1225,6 +1225,8 @@ def explain_winner(winner_src,dev_df,val_df):
     plt.gca().spines['right'].set_visible(False)
     plt.gca().spines['top'].set_visible(False)
 
+    plt.show()
+
     shap.summary_plot(shap_values, data_valid.iloc[:1000,:])
 
     # Dependency plot for top 20

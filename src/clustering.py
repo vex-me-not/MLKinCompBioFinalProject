@@ -2,6 +2,8 @@ import anndata as ad
 import scanpy as sc
 import scanpy.external as sce
 
+import scanorama
+
 import numpy as np
 
 import pandas as pd
@@ -510,7 +512,7 @@ def plot_dendro_heatmap(
     ax_heatmap_clusters = fig.add_subplot(gs[1])
     cluster_colors = adata_ordered.obs[cluster_labels_key].astype('category').cat.codes
     # Use a colormap with enough distinct colors
-    cmap_clusters = plt.get_cmap('bwr', len(np.unique(cluster_colors)))
+    cmap_clusters = plt.get_cmap('Paired', len(np.unique(cluster_colors)))
     sns.heatmap(
         cluster_colors.to_frame(),
         ax=ax_heatmap_clusters,
@@ -523,7 +525,7 @@ def plot_dendro_heatmap(
     # --- Annotation Heatmap 2: Batch/Sample Origin ---
     ax_heatmap_batch = fig.add_subplot(gs[2])
     batch_colors = adata_ordered.obs['batch'].astype('category').cat.codes
-    cmap_batch = plt.get_cmap("bwr", len(np.unique(batch_colors)))
+    cmap_batch = plt.get_cmap("coolwarm", len(np.unique(batch_colors)))
     sns.heatmap(
         batch_colors.to_frame(),
         ax=ax_heatmap_batch,
@@ -602,19 +604,26 @@ def hierarchical_clustering(
     ):
     np.random.seed(seed)
 
-    #  --- Step 0: preprocess ---
-    print("--- Preprocessing ---")
+    # --- Step 1: Preprocess and Batch correction ---
+    print("--- Performing batch correction with Scanorama ---")
+    new_batches = []
+    for batata in batches:
+        indices = np.random.choice(
+            batata.shape[0], size=int(m/len(batches)), replace=False
+        )
+        batata = batata[indices, :]
+        new_batches.append(batata)
+        del batata
+        gc.collect()
+    batches = scanorama.correct_scanpy(new_batches, return_dimred=False, verbose=False)
+    del new_batches
+    gc.collect()
     adata = ad.concat(
         batches, axis=0, join="outer", label="batch", keys=batch_keys
     )
     del batches
     gc.collect()
-    print("Batches merged")
-    if m:
-        indices = np.random.choice(
-            adata.shape[0], size=m, replace=False
-        )
-        adata = adata[indices, :]
+    print("Batch correction completed.")
     if n:
         sc.pp.highly_variable_genes(adata, n_top_genes=n, flavor="seurat")
         adata = adata[:, adata.var.highly_variable].copy()
@@ -630,17 +639,6 @@ def hierarchical_clustering(
         print(f"All genes used, {adata.n_vars}")
     print("Preprocessing completed")
     print("---\n")
-
-    # # --- Step 1: Batch correction ---
-    # print("--- Performing batch correction with Scanorama ---")
-    # batches_for_correction = [
-    #     adata[adata.obs["batch"] == b].copy() for b in batch_keys
-    # ]
-    # sce.pp.scanorama_integrate(
-    #     batches_for_correction, key="batch", key_added="scanorama"
-    # )
-    # print("Batch correction completed.")
-    # print("---\n")
 
     # --- Step 2: PCA --- 
     print("--- Performing PCA ---")
@@ -788,7 +786,7 @@ def hierarchical_clustering(
         key="rank_genes_hclust",
         groupby="hierarchical_clusters",
         show_gene_labels=True,
-        use_raw=True,
+        # use_raw=True,
         cmap="bwr",
         show=False,
         dendrogram=True

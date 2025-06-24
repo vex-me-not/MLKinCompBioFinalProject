@@ -971,17 +971,26 @@ def bootstrap_model(df_dev:pd.DataFrame,df_val:pd.DataFrame, model):
     bootstrap_model_plot(df_dev=df_dev,df_val=df_val,model=model)
 
 # method used to save the winner model. It actually saves a pipeline
-def save_winner(path,winner,winner_name):
+def save_winner(train_path,test_path,winner,winner_name):
     # the directory where the pipeline will be saved
     models_dir="../models"
     model_io=IO(models_dir) # class used to handle the actual saving
 
-    df=pd.read_csv(path)
+    df_train=pd.read_csv(train_path)
+    df_test=pd.read_csv(test_path)
+
+    common_columns = df_train.columns.intersection(df_test.columns)
+
+    df_train=df_train[common_columns].copy()
+    print(df_train.shape)
+    df_test=df_test[common_columns].copy()
+    print(df_test.shape)
 
     # we get the x and y of the given dataset
-    x_full,y_full=keep_features(data_df=df)
+    x_full,y_full=keep_features(data_df=df_train)
     # y_full=encode(y_full)
 
+    del df_train,df_test,common_columns
     # we drop the target from the features
     # x_full=df.drop(columns="class")
 
@@ -1009,7 +1018,7 @@ def save_winner(path,winner,winner_name):
     ])
 
     # we fit the model on the dataset
-    winner_pipeline.fit(X=x_full,y=y_full)
+    winner.fit(X=x_full,y=y_full)
     
     print(f"Saving winner model ({winner_name}) with name winner.pkl")
 
@@ -1181,7 +1190,43 @@ def get_best_model(path):
     df_results = pd.DataFrame(metrics_summary)
     df_results.to_csv("simple_model_metrics_summary.csv", index=False)
 
-# -----------------TO DO--------------------
 
-# Create df from adata to use in rnCV
-# Alter rnCV so that it works with our data
+def explain_winner(winner_src,dev_df,val_df):
+    # the directory where the winner lies
+    models_dir=winner_src
+    model_io=IO(models_dir) # this class will handle the loading
+
+    winner=model_io.load(name='winner') # we load the model
+
+    data,y_train=keep_features(data_df=dev_df)
+    data_valid,y_valid=keep_features(data_df=val_df)
+    
+    # explain 1000 examples from the validation set
+    # each row is an explanation for a sample, and the last column in the base rate of the model
+    # the sum of each row is the margin (log odds) output of the model for that sample
+    shap_values = shap.TreeExplainer((winner.named_steps['model']).booster_).shap_values(data_valid.iloc[:1000,:])
+    shap_values.shape
+    
+    # compute the global importance of each feature as the mean absolute value
+    # of the feature's importance over all the samples
+    global_importances = np.abs(shap_values).mean(0)[:-1]
+
+    # make a bar chart that shows the global importance of the top 20 features
+    inds = np.argsort(-global_importances)
+    f = plt.figure(figsize=(5,10))
+    y_pos = np.arange(20)
+    inds2 = np.flip(inds[:20], 0)
+    plt.barh(y_pos, global_importances[inds2], align='center', color="#1E88E5")
+    plt.yticks(y_pos, fontsize=13)
+    plt.gca().set_yticklabels(data.columns[inds2])
+    plt.xlabel('mean abs. SHAP value (impact on model output)', fontsize=13)
+    plt.gca().xaxis.set_ticks_position('bottom')
+    plt.gca().yaxis.set_ticks_position('none')
+    plt.gca().spines['right'].set_visible(False)
+    plt.gca().spines['top'].set_visible(False)
+
+    shap.summary_plot(shap_values, data_valid.iloc[:1000,:])
+
+    # Dependency plot for top 20
+    for i in reversed(inds2):
+        shap.dependence_plot(i, shap_values, data_valid.iloc[:1000,:])

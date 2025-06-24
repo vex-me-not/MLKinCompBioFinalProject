@@ -1,14 +1,32 @@
-import numpy as np
+import anndata as ad
 import scanpy as sc
-import matplotlib.pyplot as plt
+import scanpy.external as sce
+import scanorama
+
+import numpy as np
+
+import random
+
 from sklearn.cluster import DBSCAN
+
+import scipy.cluster.hierarchy as sch
+from scipy.cluster.hierarchy import cophenet
+from scipy.spatial.distance import pdist
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+
 from tqdm import tqdm
+
 import gc
+
 from sklearn.metrics import (
     calinski_harabasz_score, silhouette_score, davies_bouldin_score
 )
 
+from src.utils import find_elbow_pcs
 
+from typing import Optional
 
 def evaluate_dbscan_clustering(
         embedding: np.ndarray,
@@ -343,8 +361,7 @@ def run_dbscan_opt(
             sc.pl.umap(
                 adata,
                 color=[f"dbscan_{embedding_method}"],
-                title=f"DBSCAN on {embedding_method.upper()} "
-                "(eps={best_eps:.2f}, min_samples={best_min_pts})",
+                title=f"DBSCAN on {embedding_method.upper()} (eps={best_eps:.2f}, min_samples={best_min_pts})",
                 show=True
             )
         else:
@@ -391,4 +408,160 @@ def run_dbscan_opt(
     print("5. Consider the number of clusters relative to expected cell types")
 
     print("\nOptimization complete.")
+
+    del embedding_results
+    del score_matrices
+    del n_clusters_matrix
+    del n_noise_matrix
+    del noise_percentage_matrix
+    del embedding
+    del db_optimal
+
+    gc.collect()
+
+
+def hierarchical_clustering(
+        batches: list[sc.AnnData],
+        batch_keys: list[str],
+        min_pts: int,
+        eps: float,
+        n_pcs: Optional[int] = None,
+        m : Optional[int] = None,
+        n : Optional[int] = None,
+        embedding_method: str = "PCA",
+        n_neighbors: int = 15,
+        scale_max_val : int = 10,
+        dendrogram_limit: int = 50,
+        clustermap_limit: Optional[int] = None,
+        seed : int = 42,
+    ):
+    np.random.seed(seed)
+
+    #  --- Step 0: preprocess ---
+    print("--- Preprocessing ---")
+    adata = ad.concat(
+        batches, axis=0, join="outer", label="batch", keys=batch_keys
+    )
+    del batches
+    gc.collect()
+    print("Batches merged")
+    if m:
+        indices = np.random.choice(
+            adata.shape[0], size=m, replace=False
+        )
+        adata = adata[indices, :]
+    if n:
+        sc.pp.highly_variable_genes(adata, n_top_genes=n, flavor="seurat")
+        adata = adata[:, adata.var.highly_variable].copy()
+    sc.pp.scale(adata, max_value=scale_max_val, zero_center=False)
+    if m:
+        print(f"Downsampled to {m} cells")
+    else:
+        print(f"All cells used, {adata.n_obs}")
+    if n:
+        print(f"Selected top {n} most variable genes")
+    else:
+        print(f"All genes used, {adata.n_vars}")
+    print("Preprocessing completed")
+    print("---\n")
+
+    # # --- Step 1: Batch correction ---
+    # print("--- Performing batch correction with Scanorama ---")
+    # sce.pp.scanorama_integrate(
+    #     [
+    #         adata[adata.obs["batch"] == "v2"],
+    #         adata[adata.obs["batch"] == "v3"]
+    #     ],
+    #     key="batch",
+    #     key_added="scanorama"
+    # )
+    # print("Batch correction completed.")
+    # print("---\n")
+
+    # --- Step 2: PCA --- 
+    print("--- Performing PCA ---")
+    sc.tl.pca(adata, svd_solver="arpack", random_state=seed)
+    sc.pl.pca_variance_ratio(adata, log=True)
+    print("PCA completed")
+    if not n_pcs:
+        n_pcs = find_elbow_pcs(adata.uns["pca"]["variance_ratio"])
+        print(
+            "n_PCs for PCA not provided, "
+            f"calculated using elbow method as: {n_pcs}"
+        )
+    print("---\n")
+
+    # --- Step 3: Nearest neighbors distance matrix ---
+    print("--- Finding nearest neighbors ---")
+    sc.pp.neighbors(adata, n_neighbors=n_neighbors, n_pcs=n_pcs)
+    print(
+        "Calculated nearest neighbors distance matrix "
+        f"using 'n_neighbors'={n_neighbors}"
+    )
+    print("---\n")
+
+    # --- Step 4: Noise detection using DBSCAN ---
+    print("--- Removing noisy points using DBSCAN ---")
+    dbscanner = DBSCAN(eps=eps, min_samples=min_pts)
+    if embedding_method.lower() == "pca":
+        embedding = adata.obsm["X_pca"][:, :n_pcs]
+    elif embedding_method.lower() == "tsne":
+        sc.tl.tsne(adata, random_state=seed)
+        embedding = adata.obsm["X_tsne"]
+    elif embedding_method.lower() == "umap":
+        sc.tl.umap(adata, random_state=seed)
+        embedding = adata.obsm["X_umap"]
+    else:
+        raise ValueError(
+            f"Invalid embedding method for DBSCAN: {embedding_method} "
+            f"select one from 'pca', 'tsne', or 'umap"
+        )
+    print(f"Using {embedding_method} as embedding method")
+    cluster_labels = dbscanner.fit_predict(embedding)
+    print("DBSCAN ran, removing noise points")
+    noise_mask = cluster_labels == -1
+    adata = adata[~noise_mask, :].copy()
+    print(f"Noisy cells removed: {noise_mask.sum()}")
+    print("---\n")
+
+    # --- Step 5: Hierarchical clustering ---
+    print("--- Clustering cells ---")
+    # Step 5.1: Pairwise distances
+    X = adata.obsm["X_pca"][:, :30]
+    Y = pdist(X)
+    # Step 5.2: Compute linkage matrix
+    Z = sch.linkage(Y, method="ward")  # I think ward is always the best
+                                       # and should work nicely here as it
+                                       # minimizes variance by each clustering
+                                       # step
+    # Step 5.3 Plot truncated dendrogram
+    plt.figure(figsize=(12, 6))
+    sch.dendrogram(Z, truncate_mode="level", p=dendrogram_limit)
+    plt.title(f"Truncated Dendrogram (Top {dendrogram_limit} Levels)")
+    plt.xlabel("Clustered Cells")
+    plt.ylabel("Distance")
+    plt.show()
+    # Step 5.4: Plot a clustermap
+    if clustermap_limit:
+        idx = random.sample(range(X.shape[0]), clustermap_limit)
+        X_clustermap = X[idx, :]
+    sns.clustermap(
+        X_clustermap if clustermap_limit else X,
+        method="ward", metric="euclidean",
+        cmap="viridis", figsize=(10, 10)
+    )
+    plt.title("Clustermap of Sampled Cells")
+    plt.show()
+    # Step 6: Cophenetic correlation coefficient
+    c, coph_dists = cophenet(Z, Y)
+    print(f"Cophenetic Correlation Coefficient: {c:.4f}")
+
+    # cleanup
+    del adata
+    if clustermap_limit:
+        del X_clustermap
+        del idx
+    del X
+    del Y
+    del Z
     gc.collect()

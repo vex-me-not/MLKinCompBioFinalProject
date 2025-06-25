@@ -1083,7 +1083,7 @@ def hierarchical_clustering(
     )
     sc.pl.rank_genes_groups_heatmap(
         adata,
-        n_genes=5,
+        n_genes=markers_per_clust,
         key="rank_genes_hclust",
         groupby="hierarchical_clusters",
         show_gene_labels=True,
@@ -1110,7 +1110,6 @@ def hierarchical_clustering(
         show=False
     )
     plt.suptitle("UMAP with Hierarchical Clusters and Top Marker Genes")
-    plt.tight_layout()
     plt.show()
     print("---\n")
 

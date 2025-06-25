@@ -159,7 +159,7 @@ class rnCV():
         self.R=r
         self.N=n
         self.K=k
-        self.x, self.y=keep_features(data_df=data_df,target='class',to_drop='gene_identifier')
+        self.x, self.y=keep_features(data_df=data_df,target='sex',to_drop='gene_identifier')
         # self.y= encode(self.y)
         self.estimators=estimators
         self.params=params
@@ -239,7 +239,7 @@ class rnCV():
         
 
         study=optuna.create_study(direction='maximize',study_name=model_name)
-        study.optimize(objective, n_trials=10,timeout=100.0,callbacks=[EarlyStopping(patience=4)])
+        study.optimize(objective, n_trials=30,timeout=180.0,callbacks=[EarlyStopping(patience=5)])
         
         return study.best_params        
 
@@ -330,13 +330,13 @@ class rnCV():
             
 
         study=optuna.create_study(direction='maximize',study_name="Winner:"+winner)
-        study.optimize(objective, n_trials=60,timeout=300.0,callbacks=[EarlyStopping(patience=10)])
+        study.optimize(objective, n_trials=60,timeout=600.0,callbacks=[EarlyStopping(patience=10)])
             
         return study.best_params
 
 
 # method used to run the repeated nested cross validation pipeline
-def perform_rnCV(path):
+def perform_rnCV(path,res_dest='../data/rncv_SEX_summary_results.csv'):
     # we load the given dataset into a data frame
     df=pd.read_csv(path)
 
@@ -350,42 +350,43 @@ def perform_rnCV(path):
         'LightGBM': lgb.LGBMClassifier
     }
 
-    # we define the hyperparameter spaces for the aforementioned estimators
+    # we define the hyperparameter spaces, same as the ones we used in rnCV
     param_spaces = {
         'LogisticRegression': lambda trial: {
             'penalty': trial.suggest_categorical('penalty', ['l1', 'l2', 'elasticnet']),
             'solver': trial.suggest_categorical('solver', ['saga']),
-            'C': trial.suggest_categorical('C', [1e-3,1e-2,1e-1]),
-            'l1_ratio': trial.suggest_categorical('l1_ratio', [0.25,0.5,0.75])
+            'C': trial.suggest_float('C', 1e-3, 1e0, log=True),
+            'l1_ratio': trial.suggest_uniform('l1_ratio', 0, 1)
         },
-        # 'GaussianNB': lambda trial: {'var_smoothing': trial.suggest_categorical('var_smoothing', [1e-2,5*1e-2,1e-1])},
+        # 'GaussianNB': lambda trial: {'var_smoothing': trial.suggest_float('var_smoothing', 1e-2, 1e-1, log=True)},
         'LDA': lambda trial: {'solver':trial.suggest_categorical('solver', ['svd']),
-                              'tol':trial.suggest_categorical('tol', [1e-2,5*1e-2,1e-1,])},
+                              'tol':trial.suggest_float('tol', 5*1e-2, 1e-1, log=True)},
         # 'SVM': lambda trial: {
-        #     'C': trial.suggest_categorical('C', [1e-2,5*1e-2,1e-1]),
+        #     'C': trial.suggest_float('C', 5*1e-2, 1e2, log=True),
         #     'kernel': trial.suggest_categorical('kernel', ['linear', 'rbf']),
         #     'probability': trial.suggest_categorical('probability', [True])
         # },
         'RandomForest': lambda trial: {
-            'n_estimators': trial.suggest_categorical('n_estimators', [100,250,500]),
-            'max_depth': trial.suggest_categorical('max_depth', [5,10,15]),
-            'min_samples_split': trial.suggest_categorical('min_samples_split', [2,5,10])
+            'n_estimators': trial.suggest_int('n_estimators', 100, 500),
+            'max_depth': trial.suggest_int('max_depth', 5, 15),
+            'min_samples_split': trial.suggest_int('min_samples_split', 2, 10)
         },
         'LightGBM': lambda trial: {
-            'n_estimators': trial.suggest_categorical('n_estimators', [100,250,500]),
-            'max_depth': trial.suggest_categorical('max_depth', [5,10,15]),
-            'learning_rate': trial.suggest_categorical('learning_rate',[1e-3,1e-2,1e-1]),
-            'verbosity': trial.suggest_categorical('verbosity', [-1])
+            'n_estimators': trial.suggest_int('n_estimators', 100, 500),
+            'max_depth': trial.suggest_int('max_depth', 5, 15),
+            'learning_rate': trial.suggest_float('learning_rate', 1e-3, 1e-1, log=True),
+            'verbosity': trial.suggest_categorical('verbosity', [-1]),
+            'is_unbalance': trial.suggest_categorical('is_unbalance',[True])
         }
     }
 
     # we initialize a rnCV class instance and we run_rnCV
-    rncv=rnCV(data_df=df, estimators=estimators,params=param_spaces, r=4, n=5, k=3, random_state=42)
+    rncv=rnCV(data_df=df, estimators=estimators,params=param_spaces, r=2, n=4, k=3, random_state=42)
     results=rncv.run_rnCV()
 
     # we summarize and save the results in a dataframe
     summary=rncv.results_summary()
-    summary.to_csv('../data/rncv_summary_results.csv')
+    summary.to_csv(res_dest)
 
     print("Summary:\n", summary)
 
@@ -410,11 +411,11 @@ def winner_tuning(df:pd.DataFrame,winner):
             'l1_ratio': trial.suggest_uniform('l1_ratio', 0, 1)
         },
         'GaussianNB': lambda trial: {'var_smoothing': trial.suggest_float('var_smoothing', 1e-2, 1e-1, log=True)},
-        'LDA': lambda trial: {'solver':trial.suggest_categorical('solver', ['svd', 'lsqr', 'eigen']),
+        'LDA': lambda trial: {'solver':trial.suggest_categorical('solver', ['svd']),
                               'tol':trial.suggest_float('tol', 5*1e-2, 1e-1, log=True)},
         'SVM': lambda trial: {
             'C': trial.suggest_float('C', 5*1e-2, 1e2, log=True),
-            'kernel': trial.suggest_categorical('kernel', ['linear', 'rbf', 'poly']),
+            'kernel': trial.suggest_categorical('kernel', ['linear', 'rbf']),
             'probability': trial.suggest_categorical('probability', [True])
         },
         'RandomForest': lambda trial: {
@@ -423,10 +424,11 @@ def winner_tuning(df:pd.DataFrame,winner):
             'min_samples_split': trial.suggest_int('min_samples_split', 2, 10)
         },
         'LightGBM': lambda trial: {
-            'n_estimators': trial.suggest_int('n_estimators', 100, 500),
-            'max_depth': trial.suggest_int('max_depth', 5, 15),
-            'learning_rate': trial.suggest_float('learning_rate', 1e-3, 1e-1, log=True),
-            'verbosity': trial.suggest_categorical('verbosity', [-1])
+            'n_estimators': trial.suggest_int('n_estimators', 300, 1000),
+            'max_depth': trial.suggest_int('max_depth', 10, 30),
+            'learning_rate': trial.suggest_float('learning_rate', 5*1e-3, 5*1e-1, log=True),
+            'verbosity': trial.suggest_categorical('verbosity', [-1]),
+            'is_unbalance': trial.suggest_categorical('is_unbalance',[True])
         }
     }
 
@@ -469,7 +471,7 @@ def clean_data(data:pd.DataFrame):
     print(f'We now have {len(nan_columns)} columns with missing values. These columns are : {nan_columns}')
 
     # we encode our two classes (Malignan -> 1, Benign -> 0)    
-    df=encode(data_df=df,target='class')
+    df=encode(data_df=df,target='sex')
 
     # we remove the duplicates
     df=remove_duplicates(df)
@@ -505,7 +507,7 @@ def impute(data_df: pd.DataFrame):
 
     return df
 
-def encode(data_df: pd.DataFrame,target='class'):
+def encode(data_df: pd.DataFrame,target='sex'):
     """
     Method used to encode the entries of the column 'diagnosis'
     Male --> 1
@@ -564,7 +566,7 @@ def check_for_outliers(data_df: pd.DataFrame):
         print("No outliers in the set")
 
 # method used to explore the class imbalance of our dataset
-def class_imbalance(data_df: pd.DataFrame,field='class'):
+def class_imbalance(data_df: pd.DataFrame,field='sex'):
     df=data_df
     order=[0,1] # the order that we want to present our classes
 
@@ -579,14 +581,14 @@ def class_imbalance(data_df: pd.DataFrame,field='class'):
     print(fractions)
 
 # method used to get the target of each dataset. Raises a ValueError if given target does not exist
-def get_Y(data_df: pd.DataFrame,target='class'):
+def get_Y(data_df: pd.DataFrame,target='sex'):
     if target not in data_df.columns:
         raise ValueError("Please give a valid target!")
     
     return pd.DataFrame(data_df[target])
 
 # method used to keep the features and the target. Return x and y
-def keep_features(data_df: pd.DataFrame,target='class',to_drop='gene_identifier'):
+def keep_features(data_df: pd.DataFrame,target='sex',to_drop='gene_identifier'):
     tdrp=[]
     
     # we update our columns to be dropped with the list given
@@ -600,7 +602,7 @@ def keep_features(data_df: pd.DataFrame,target='class',to_drop='gene_identifier'
     return x,Y
 
 # method used to calculate the correlation between each feature and the target. We use thres to filter the non-significant
-def corr_between_target(data_df: pd.DataFrame,target='class',thres=0.1):
+def corr_between_target(data_df: pd.DataFrame,target='sex',thres=0.1):
     x,Y=keep_features(data_df=data_df,target=target,to_drop=['id']) # we get the feature and the target
     corr=pd.Series(r_regression(x,Y),index=x.columns) # we calculate the correlation of each feature
     selected=corr[corr.abs() >= thres].index.tolist() # we filter based on thres
@@ -611,13 +613,13 @@ def corr_between_target(data_df: pd.DataFrame,target='class',thres=0.1):
     print(f'If we do, we will go from {x.shape[1]} features to {len(selected)} features,that will be the most correlated')
 
     print("Returning the features that could be kept")
-    viz_corr_between_target(corr=corr,target='class') # we visualize the above results 
+    viz_corr_between_target(corr=corr,target='sex') # we visualize the above results 
 
 
     return selected
 
 # method used to calculate the correlation between the features. We use thres to keep only the most correlated
-def corr_between_features(data_df: pd.DataFrame,target='class',to_drop=['class','gene_identifier'],thres=0.8):
+def corr_between_features(data_df: pd.DataFrame,target='sex',to_drop=['sex','gene_identifier'],thres=0.8):
     df=data_df
 
     # we find our features
@@ -665,7 +667,7 @@ def viz_corr_between_features(corr_matrix):
 
 
 # method used to visualizr the correlation between features and target
-def viz_corr_between_target(corr:pd.Series,target='class'):
+def viz_corr_between_target(corr:pd.Series,target='sex'):
     plt.figure(figsize=(10,6))
     
     corr.sort_values().plot(kind='barh',color='salmon')
@@ -679,7 +681,7 @@ def viz_corr_between_target(corr:pd.Series,target='class'):
     plt.show()
 
 # method used to visualize the distribution of the features through boxplots. It plots everything into one plot
-def boxpolt_distro(data_df: pd.DataFrame,to_drop=['class','gene_identifier']):
+def boxpolt_distro(data_df: pd.DataFrame,to_drop=['sex','gene_identifier']):
     df=data_df
 
     feats=df.drop(columns=to_drop).columns.to_list() # our features
@@ -697,7 +699,7 @@ def boxpolt_distro(data_df: pd.DataFrame,to_drop=['class','gene_identifier']):
 
 # method used to perform pca. In our version, we elected to find how many components explain 95% of the variance. Results in a dataframe
 def perform_pca(data_df: pd.DataFrame):
-    x,Y=keep_features(data_df=data_df,target='class',to_drop=['gene_identifier']) # we get the features and the target
+    x,Y=keep_features(data_df=data_df,target='sex',to_drop=['gene_identifier']) # we get the features and the target
 
     data_rescaled=scale_data(x) # we scale the data
 
@@ -714,7 +716,7 @@ def perform_pca(data_df: pd.DataFrame):
     viz_pca(reduced,Y) # we visualize using just two components, to see whether the class can be seperated
 
     pca_df=pd.DataFrame(data=reduced)
-    pca_df['class']=Y.values
+    pca_df['sex']=Y.values
     
     return pca_df
 
@@ -837,7 +839,7 @@ def bootstrap_model_intervals(df_dev:pd.DataFrame,df_val:pd.DataFrame, model):
     }
 
     # we get the x and y of the dev set
-    x_dev, y_dev=keep_features(data_df=df_dev,target='class',to_drop='gene_identifier')
+    x_dev, y_dev=keep_features(data_df=df_dev,target='sex',to_drop='gene_identifier')
     # y_dev=encode(y_dev)
 
     # we scale and we impute here as to avoid data leakage
@@ -845,7 +847,7 @@ def bootstrap_model_intervals(df_dev:pd.DataFrame,df_val:pd.DataFrame, model):
     # x_dev=scale_data(x_dev)
 
     # we get the x and y of the val set    
-    x_val, y_val=keep_features(data_df=df_val,target='class',to_drop='gene_identifier')
+    x_val, y_val=keep_features(data_df=df_val,target='sex',to_drop='gene_identifier')
     # y_val=encode(y_val)
 
     # we scale and we impute here as to avoid data leakage
@@ -922,7 +924,7 @@ def metric_ci_plot(y_true, y_pred, proba, n_samples=1000, seed=42):
 def bootstrap_model_plot(df_dev:pd.DataFrame,df_val:pd.DataFrame, model):
 
     # we get the x and y of the dev set
-    x_dev, y_dev=keep_features(data_df=df_dev,target='class',to_drop='gene_identifier')
+    x_dev, y_dev=keep_features(data_df=df_dev,target='sex',to_drop='gene_identifier')
     # y_dev=encode(y_dev)
 
     # we impute and we scale here as to avoid data leakage
@@ -930,7 +932,7 @@ def bootstrap_model_plot(df_dev:pd.DataFrame,df_val:pd.DataFrame, model):
     # x_dev=scale_data(x_dev)
 
     # we get the x and y of the val set    
-    x_val, y_val=keep_features(data_df=df_val,target='class',to_drop='gene_identifier')
+    x_val, y_val=keep_features(data_df=df_val,target='sex',to_drop='gene_identifier')
     # y_val=encode(y_val)
 
     # we impute and we scale here as to avoid data leakage
@@ -972,7 +974,7 @@ def bootstrap_model(df_dev:pd.DataFrame,df_val:pd.DataFrame, model):
     bootstrap_model_plot(df_dev=df_dev,df_val=df_val,model=model)
 
 # method used to save the winner model. It actually saves a pipeline
-def save_winner(train_path,test_path,winner,winner_name):
+def save_winner(train_path,test_path,winner,winner_name,saved_name='SEX_winner'):
     # the directory where the pipeline will be saved
     models_dir="../models"
     model_io=IO(models_dir) # class used to handle the actual saving
@@ -997,7 +999,7 @@ def save_winner(train_path,test_path,winner,winner_name):
 
     # we save the features we used so that the pipeline may use them during inference
     feature_columns=x_full.columns.tolist()
-    joblib.dump(feature_columns, "../models/feature_columns.pkl")
+    joblib.dump(feature_columns, "../models/SEX_feature_columns.pkl")
 
     # the pipeline that handles the scaling and transformation
     # scale_pipeline=Pipeline([
@@ -1021,14 +1023,14 @@ def save_winner(train_path,test_path,winner,winner_name):
     # we fit the model on the dataset
     winner.fit(X=x_full,y=y_full)
     
-    print(f"Saving winner model ({winner_name}) with name winner.pkl")
+    print(f"Saving winner model ({winner_name}) with name {saved_name}.pkl")
 
     # we save the model
-    model_io.save(model=winner_pipeline,name='winner')
+    model_io.save(model=winner_pipeline,name=saved_name)
 
 
 # method used to perform inference on the dataset that resides in test_df_path
-def infere_with_winner(test_df_path):
+def infere_with_winner(test_df_path,saved_name='SEX_winner'):
 
     # we load the dataset
     test_df=pd.read_csv(test_df_path)
@@ -1037,7 +1039,7 @@ def infere_with_winner(test_df_path):
     models_dir="../models"
     model_io=IO(models_dir) # this class will handle the loading
 
-    winner=model_io.load(name='winner') # we load the model
+    winner=model_io.load(name=saved_name) # we load the model
 
     preds=winner.predict(test_df) # we predict
     
@@ -1048,13 +1050,13 @@ def infere_with_winner(test_df_path):
     test_df.to_csv('../data/predictions.csv',index=False)
 
 # method used to get the best top coefficients of Logistic Regression. Returns a dataframe
-def get_top_coefficients(top,names):
+def get_top_coefficients(top,names,saved_name='SEX_winner'):
 
     # the directory where the winner lies
     models_dir="../models"
     model_io=IO(models_dir) # this class will handle the loading
 
-    winner=model_io.load(name='winner') # we load the model
+    winner=model_io.load(name=saved_name) # we load the model
 
     cf=(winner.named_steps['model'].coef_).flatten() # the coefficients of the model
     features=names # the name of the features
@@ -1087,64 +1089,12 @@ def top_coefficients_winner(top,names):
     cf_df=get_top_coefficients(top=top,names=names)
     plot_best_coefficients(cf_df=cf_df,top=top)
 
-def produce_df(hy_path,th_path,verbose=False,test=False):
-    hypothalamus=anndata.read_h5ad(hy_path)
 
-    if verbose is True:
-        print(hypothalamus)
-        print("\n\n-----Obs header-----\n\n",hypothalamus.obs.head())
-        print("\n\n-----Var header-----\n\n",hypothalamus.var.head())
-
-    hypothalamus.obs['class'] = 0 # Hypothalamus -> 0
-
-    thalamus=anndata.read_h5ad(th_path)
-
-    if verbose is True:
-        print(thalamus)
-        print("\n\n-----Obs header-----\n\n",thalamus.obs.head())
-        print("\n\n-----Var header-----\n\n",thalamus.var.head())
-
-    thalamus.obs['class'] = 1 # Thalamus -> 1
-
-    adata_combined = thalamus.concatenate(hypothalamus, batch_key='source', batch_categories=['thalamus', 'hypothalamus'])
-
-    del thalamus,hypothalamus
-    gc.collect()
-
-    state=42
-    if test is True:
-        state=41
-    # Set a seed for reproducibility
-    np.random.seed(state)
-
-    # Generate a shuffled index
-    shuffled_idx = np.random.permutation(adata_combined.n_obs)
-
-    # Reorder the AnnData object
-    adata_combined = adata_combined[shuffled_idx].copy()
-
-    # Keep top 2000 genes, some sort of dimensionality reduction
-    sc.pp.highly_variable_genes(adata_combined, n_top_genes=2000)
-    adata_combined = adata_combined[:, adata_combined.var['highly_variable']]
-
-    X = adata_combined.X.toarray() if not isinstance(adata_combined.X, np.ndarray) else adata_combined.X
-    # X = adata_combined.X
-    y = adata_combined.obs['class'].values
-
-    print(adata_combined.var_names)
-
-    X_df=pd.DataFrame(X,columns=adata_combined.var_names)
-    X_df['class']=y
-
-    del adata_combined,X,y
-    gc.collect()
-
-    return X_df
 
 def get_best_model(path):
     df=pd.read_csv(path)
 
-    X,y=keep_features(data_df=df,target='class',to_drop='gene_identifier')
+    X,y=keep_features(data_df=df,target='sex',to_drop='gene_identifier')
 
     models = {
         'LDA': LinearDiscriminantAnalysis(tol=0.1),
@@ -1194,12 +1144,12 @@ def get_best_model(path):
     df_results.to_csv("simple_model_metrics_summary.csv", index=False)
 
 
-def explain_winner(winner_src,dev_df,val_df,samples_explained,top_k):
+def explain_winner(winner_src,dev_df,val_df,samples_explained,top_k,saved_name='SEX_winner'):
     # the directory where the winner lies
     models_dir=winner_src
     model_io=IO(models_dir) # this class will handle the loading
 
-    winner=model_io.load(name='winner') # we load the model
+    winner=model_io.load(name=saved_name) # we load the model
 
     data,y_train=keep_features(data_df=dev_df)
     data_valid,y_valid=keep_features(data_df=val_df)
@@ -1276,3 +1226,97 @@ def create_sexed_adata(adata_path,encoded_sex_path,dest_path):
     gc.collect()
 
     adata.write(dest_path)
+
+def produce_df(hy_path,th_path,verbose=False,test=False):
+    hypothalamus=anndata.read_h5ad(hy_path)
+
+    if verbose is True:
+        print(hypothalamus)
+        print("\n\n-----Obs header-----\n\n",hypothalamus.obs.head())
+        print("\n\n-----Var header-----\n\n",hypothalamus.var.head())
+
+    # hypothalamus.obs['sex'] = 0 # Hypothalamus -> 0
+
+    thalamus=anndata.read_h5ad(th_path)
+
+    if verbose is True:
+        print(thalamus)
+        print("\n\n-----Obs header-----\n\n",thalamus.obs.head())
+        print("\n\n-----Var header-----\n\n",thalamus.var.head())
+
+    # thalamus.obs['sex'] = 1 # Thalamus -> 1
+
+    adata_combined = thalamus.concatenate(hypothalamus, batch_key='source', batch_categories=['thalamus', 'hypothalamus'])
+
+    del thalamus,hypothalamus
+    gc.collect()
+
+    state=42
+    if test is True:
+        state=41
+    # Set a seed for reproducibility
+    np.random.seed(state)
+
+    # Generate a shuffled index
+    shuffled_idx = np.random.permutation(adata_combined.n_obs)
+
+    # Reorder the AnnData object
+    adata_combined = adata_combined[shuffled_idx].copy()
+
+    # Keep top 2000 genes, some sort of dimensionality reduction
+    sc.pp.highly_variable_genes(adata_combined, n_top_genes=2000)
+    adata_combined = adata_combined[:, adata_combined.var['highly_variable']]
+
+    X = adata_combined.X.toarray() if not isinstance(adata_combined.X, np.ndarray) else adata_combined.X
+    # X = adata_combined.X
+    y = adata_combined.obs['sex'].values
+
+    print(adata_combined.var_names)
+
+    X_df=pd.DataFrame(X,columns=adata_combined.var_names)
+    X_df['sex']=y
+
+    del adata_combined,X,y
+    gc.collect()
+
+    return X_df
+
+def sex_specific_region(region_path,verbose=False,test=False):
+    region=anndata.read_h5ad(region_path)
+
+    if verbose is True:
+        print(region)
+        print("\n\n-----Obs header-----\n\n",region.obs.head())
+        print("\n\n-----Var header-----\n\n",region.var.head())
+    
+
+    state=42
+    if test is True:
+        state=41
+    # Set a seed for reproducibility
+    np.random.seed(state)
+
+    # Generate a shuffled index
+    shuffled_idx = np.random.permutation(region.n_obs)
+
+    # Reorder the AnnData object
+    region = region[shuffled_idx].copy()
+
+    # Keep top 2000 genes, some sort of dimensionality reduction
+    sc.pp.highly_variable_genes(region, n_top_genes=2000)
+    region = region[:, region.var['highly_variable']]
+
+    X = region.X.toarray() if not isinstance(region.X, np.ndarray) else region.X
+    # X = adata_combined.X
+    y = region.obs['sex'].values
+
+    print(region.var_names)
+
+    X_df=pd.DataFrame(X,columns=region.var_names)
+    X_df['sex']=y
+
+    del region,X,y
+    gc.collect()
+
+    return X_df
+

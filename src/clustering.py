@@ -1,13 +1,9 @@
 import anndata as ad
 import scanpy as sc
-import scanpy.external as sce
-
 import scanorama
 
 import numpy as np
-
 import pandas as pd
-
 import random
 
 from sklearn.cluster import DBSCAN
@@ -22,7 +18,6 @@ import matplotlib.gridspec as gridspec
 import seaborn as sns
 
 from tqdm import tqdm
-
 import gc
 
 from sklearn.metrics import (
@@ -54,11 +49,11 @@ def evaluate_dbscan_clustering(
         and Davies-Bouldin metrics.
     """
     if len(set(labels)) < 2:
-        return {'calinski_harabasz': -1, 'silhouette': -1, 'davies_bouldin': -1}
+        return {"calinski_harabasz": -1, "silhouette": -1, "davies_bouldin": -1}
 
     mask = labels != -1
     if mask.sum() < 2:
-        return {'calinski_harabasz': -1, 'silhouette': -1, 'davies_bouldin': -1}
+        return {"calinski_harabasz": -1, "silhouette": -1, "davies_bouldin": -1}
 
     embedding_clean = embedding[mask]
     labels_clean = labels[mask]
@@ -68,12 +63,12 @@ def evaluate_dbscan_clustering(
         sil_score = silhouette_score(embedding_clean, labels_clean)
         db_score = davies_bouldin_score(embedding_clean, labels_clean)
     except:
-        return {'calinski_harabasz': -1, 'silhouette': -1, 'davies_bouldin': -1}
+        return {"calinski_harabasz": -1, "silhouette": -1, "davies_bouldin": -1}
 
     return {
-        'calinski_harabasz': ch_score,
-        'silhouette': sil_score,
-        'davies_bouldin': db_score  # Raw, not inverted yet
+        "calinski_harabasz": ch_score,
+        "silhouette": sil_score,
+        "davies_bouldin": db_score  # Raw, not inverted yet
     }
 
 
@@ -362,7 +357,7 @@ def run_dbscan_opt(
             print("  - Using different preprocessing")
             print("  - This embedding may not be suitable for DBSCAN")
 
-        if hasattr(adata, 'obsm') and f"X_umap" in adata.obsm:
+        if hasattr(adata, "obsm") and f"X_umap" in adata.obsm:
             sc.pl.umap(
                 adata,
                 color=[f"dbscan_{embedding_method}"],
@@ -382,8 +377,8 @@ def run_dbscan_opt(
     print("="*60)
     print("\nEmbedding Comparison:")
     print(
-        f"{'Method':<8} {'Composite Score':<15} {'Clusters':<10} "
-        f"{'Noise %':<8} {'eps':<6} {'min_samples':<12}"
+        f"{"Method":<8} {"Composite Score":<15} {"Clusters":<10} "
+        f"{"Noise %":<8} {"eps":<6} {"min_samples":<12}"
     )
     print("-" * 70)
 
@@ -392,12 +387,12 @@ def run_dbscan_opt(
 
     for method, results in embedding_results.items():
         print(
-            f"{method.upper():<8} {results['composite_score']:<15.3f} "
-            f"{results['n_clusters']:<10} {results['noise_percentage']:<8.1f} "
-            f"{results['eps']:<6.2f} {results['min_samples']:<12}"
+            f"{method.upper():<8} {results["composite_score"]:<15.3f} "
+            f"{results["n_clusters"]:<10} {results["noise_percentage"]:<8.1f} "
+            f"{results["eps"]:<6.2f} {results["min_samples"]:<12}"
         )
-        if results['composite_score'] > best_composite_score:
-            best_composite_score = results['composite_score']
+        if results["composite_score"] > best_composite_score:
+            best_composite_score = results["composite_score"]
             best_method = method
 
     print(
@@ -425,12 +420,183 @@ def run_dbscan_opt(
     gc.collect()
 
 
+# def plot_dendro_heatmap(
+#         adata,
+#         Z,
+#         cluster_labels_key,
+#         dendrogram_title,
+#         marker_genes,
+#         num_clusters
+#     ):
+#     """
+#     Recreates a figure similar to the first example: a horizontal dendrogram
+#     aligned with heatmaps for annotations and marker gene expression.
+
+#     Parameters
+#     ----------
+#     adata : sc.AnnData)
+#         Annotated data object.
+#     Z : np.ndarray
+#         The linkage matrix from hierarchical clustering.
+#     cluster_labels_key : str
+#         The key in adata.obs for the cluster labels.
+#     dendrogram_title : str
+#         Title for the plot.
+#     marker_genes : list
+#         A list of marker genes to plot in the heatmap.
+#     output_path : str
+#         Path to save the figure.
+#     """
+#     print("Generating dendrogram with aligned heatmaps...")
+    
+#     # Debug: Check marker genes
+#     print(f"Number of marker genes provided: {len(marker_genes)}")
+#     print(f"First 10 marker genes: {marker_genes[:10]}")
+    
+#     # Filter marker genes to only those present in the data
+#     available_genes = list(adata.var_names)
+#     valid_marker_genes = [
+#         gene for gene in marker_genes if gene in available_genes
+#     ]
+    
+#     print(
+#         f"Number of valid marker genes found in data: {len(valid_marker_genes)}"
+#     )
+
+#     if len(valid_marker_genes) == 0:
+#         print("ERROR: No marker genes found in the data!")
+#         print(f"Available genes in data: {available_genes[:20]}...")
+#         print("Skipping gene expression heatmap...")
+#         return
+    
+#     # Limit to top genes if too many
+#     if len(valid_marker_genes) > 50:
+#         valid_marker_genes = valid_marker_genes[:50]
+#         print(f"Limited to top 50 marker genes for visualization")
+    
+#     # Get the order of cells from the dendrogram
+#     with plt.rc_context({"lines.linewidth": 0.5}):
+#         dendro = sch.dendrogram(Z, no_plot=True)
+#     dendro_order = dendro["leaves"]
+    
+#     # Reorder adata based on the dendrogram
+#     adata_ordered = adata[dendro_order, :].copy()
+
+#     # --- Create the figure layout ---
+#     # We use GridSpec for precise control over subplot placement.
+#     # We'll have one wide column for the dendrogram and several narrow columns
+#     # for heatmaps.
+#     fig = plt.figure(figsize=(20, 15))
+#     gs = gridspec.GridSpec(1, 4, width_ratios=[1.5, 0.2, 0.2, 2])
+    
+#     # --- Dendrogram Panel ---
+#     ax_dendro = fig.add_subplot(gs[0])
+#     with plt.rc_context({"lines.linewidth": 0.7}):
+#         sch.dendrogram(
+#             Z,
+#             ax=ax_dendro,
+#             orientation="left",
+#             labels=adata_ordered.obs.index,
+#             distance_sort="descending",
+#             show_leaf_counts=False,
+#             leaf_font_size=0 # Hide leaf labels
+#         )
+#     ax_dendro.spines["top"].set_visible(False)
+#     ax_dendro.spines["right"].set_visible(False)
+#     ax_dendro.spines["bottom"].set_visible(False)
+#     ax_dendro.spines["left"].set_visible(False)
+#     ax_dendro.set_xticks([])
+#     ax_dendro.set_yticks([])
+#     ax_dendro.set_title(dendrogram_title, loc="center")
+
+#     # --- Annotation Heatmap 1: Cluster Labels ---
+#     ax_heatmap_clusters = fig.add_subplot(gs[1])
+#     cluster_colors = adata_ordered.obs[
+#         cluster_labels_key
+#     ].astype("category").cat.codes
+#     # Use a colormap with enough distinct colors
+#     cmap_clusters = plt.get_cmap("Paired", len(np.unique(cluster_colors)))
+#     sns.heatmap(
+#         cluster_colors.to_frame(),
+#         ax=ax_heatmap_clusters,
+#         cmap=cmap_clusters,
+#         cbar=False,
+#         yticklabels=False
+#     )
+#     ax_heatmap_clusters.set_xticklabels(["Cluster"], rotation=90)
+
+#     # --- Annotation Heatmap 2: Batch/Sample Origin ---
+#     ax_heatmap_batch = fig.add_subplot(gs[2])
+#     batch_colors = adata_ordered.obs["batch"].astype("category").cat.codes
+#     cmap_batch = plt.get_cmap("coolwarm", len(np.unique(batch_colors)))
+#     sns.heatmap(
+#         batch_colors.to_frame(),
+#         ax=ax_heatmap_batch,
+#         cmap=cmap_batch,
+#         cbar=False,
+#         yticklabels=False
+#     )
+#     ax_heatmap_batch.set_xticklabels(["Batch"], rotation=90)
+
+#     # --- Gene Expression Heatmap ---
+#     ax_heatmap_genes = fig.add_subplot(gs[3])
+    
+#     try:
+#         # Get expression data for marker genes. Using .raw to get non-scaled
+#         # data if available.
+#         if adata.raw is not None:
+#             expr_data = adata_ordered.raw[:, valid_marker_genes].X
+#             if hasattr(expr_data, "toarray"):
+#                 expr_data = expr_data.toarray()
+#         else:
+#             expr_data = adata_ordered[:, valid_marker_genes].X
+#             if hasattr(expr_data, "toarray"):
+#                 expr_data = expr_data.toarray()
+        
+#         print(f"Expression data shape: {expr_data.shape}")
+        
+#         # Check if we have valid expression data
+#         if expr_data.size == 0:
+#             print("ERROR: Expression data is empty!")
+#             return
+        
+#         # Ensure expr_data is 2D
+#         if expr_data.ndim == 1:
+#             expr_data = expr_data.reshape(-1, 1)
+        
+#         # Standardize each gene's expression for visualization
+#         # Use with_mean=True for proper standardization
+#         expr_data_scaled = StandardScaler().fit_transform(expr_data)
+        
+#         print(f"Scaled expression data shape: {expr_data_scaled.shape}")
+        
+#         sns.heatmap(
+#             expr_data_scaled,
+#             ax=ax_heatmap_genes,
+#             cmap="bwr",
+#             yticklabels=False,
+#             cbar_kws={"label": "Scaled Expression"}
+#         )
+#         ax_heatmap_genes.set_xticks(np.arange(len(valid_marker_genes)) + 0.5)
+#         ax_heatmap_genes.set_xticklabels(
+#             valid_marker_genes, rotation=90, ha="center"
+#         )
+        
+#     except Exception as e:
+#         print(f"Error creating gene expression heatmap: {e}")
+#         print("Skipping gene expression heatmap...")
+#         # Remove the gene heatmap subplot and adjust layout
+#         ax_heatmap_genes.remove()
+
+#     plt.tight_layout(pad=0.5, w_pad=0.5)
+#     plt.show()
 def plot_dendro_heatmap(
         adata,
         Z,
         cluster_labels_key,
         dendrogram_title,
-        marker_genes
+        marker_genes,
+        color_clusters=None  # NEW: Number of clusters to color in dendrogram
     ):
     """
     Recreates a figure similar to the first example: a horizontal dendrogram
@@ -448,8 +614,9 @@ def plot_dendro_heatmap(
         Title for the plot.
     marker_genes : list
         A list of marker genes to plot in the heatmap.
-    output_path : str
-        Path to save the figure.
+    color_clusters : int, optional
+        Number of clusters to color in the dendrogram. If None, uses default
+        coloring.
     """
     print("Generating dendrogram with aligned heatmaps...")
     
@@ -459,13 +626,17 @@ def plot_dendro_heatmap(
     
     # Filter marker genes to only those present in the data
     available_genes = list(adata.var_names)
-    valid_marker_genes = [gene for gene in marker_genes if gene in available_genes]
+    valid_marker_genes = [
+        gene for gene in marker_genes if gene in available_genes
+    ]
     
-    print(f"Number of valid marker genes found in data: {len(valid_marker_genes)}")
-    
+    print(
+        f"Number of valid marker genes found in data: {len(valid_marker_genes)}"
+    )
+
     if len(valid_marker_genes) == 0:
         print("ERROR: No marker genes found in the data!")
-        print(f"Available genes in data: {available_genes[:20]}...")  # Show first 20
+        print(f"Available genes in data: {available_genes[:20]}...")
         print("Skipping gene expression heatmap...")
         return
     
@@ -475,44 +646,76 @@ def plot_dendro_heatmap(
         print(f"Limited to top 50 marker genes for visualization")
     
     # Get the order of cells from the dendrogram
-    with plt.rc_context({'lines.linewidth': 0.5}):
+    with plt.rc_context({"lines.linewidth": 0.5}):
         dendro = sch.dendrogram(Z, no_plot=True)
-    dendro_order = dendro['leaves']
+    dendro_order = dendro["leaves"]
     
     # Reorder adata based on the dendrogram
     adata_ordered = adata[dendro_order, :].copy()
 
     # --- Create the figure layout ---
     # We use GridSpec for precise control over subplot placement.
-    # We'll have one wide column for the dendrogram and several narrow columns for heatmaps.
+    # We'll have one wide column for the dendrogram and several narrow columns
+    # for heatmaps.
     fig = plt.figure(figsize=(20, 15))
     gs = gridspec.GridSpec(1, 4, width_ratios=[1.5, 0.2, 0.2, 2])
     
     # --- Dendrogram Panel ---
     ax_dendro = fig.add_subplot(gs[0])
-    with plt.rc_context({'lines.linewidth': 0.7}):
-        sch.dendrogram(
-            Z,
-            ax=ax_dendro,
-            orientation='left',
-            labels=adata_ordered.obs.index,
-            distance_sort='descending',
-            show_leaf_counts=False,
-            leaf_font_size=0 # Hide leaf labels
+    
+    # Calculate color threshold if color_clusters is specified
+    color_threshold = None
+    if (
+        color_clusters is not None
+    ) and (
+        color_clusters > 1
+    ) and (
+        color_clusters <= len(Z) + 1
+    ):
+        color_threshold = Z[-(color_clusters-1), 2]
+        print(
+            f"Coloring {color_clusters} clusters "
+            f"with threshold: {color_threshold:.3f}"
         )
-    ax_dendro.spines['top'].set_visible(False)
-    ax_dendro.spines['right'].set_visible(False)
-    ax_dendro.spines['bottom'].set_visible(False)
-    ax_dendro.spines['left'].set_visible(False)
+    
+    with plt.rc_context({"lines.linewidth": 0.7}):
+        dendro_kwargs = {
+            "Z": Z,
+            "ax": ax_dendro,
+            "orientation": "left",
+            "labels": adata_ordered.obs.index,
+            "distance_sort": "descending",
+            "show_leaf_counts": False,
+            "leaf_font_size": 0  # Hide leaf labels
+        }
+        
+        # Add color threshold if specified
+        if color_threshold is not None:
+            dendro_kwargs["color_threshold"] = color_threshold
+            dendro_kwargs["above_threshold_color"] = "lightgray"
+        
+        sch.dendrogram(**dendro_kwargs)
+    
+    ax_dendro.spines["top"].set_visible(False)
+    ax_dendro.spines["right"].set_visible(False)
+    ax_dendro.spines["bottom"].set_visible(False)
+    ax_dendro.spines["left"].set_visible(False)
     ax_dendro.set_xticks([])
     ax_dendro.set_yticks([])
-    ax_dendro.set_title(dendrogram_title, loc='center')
+    
+    # Update title to include cluster coloring info
+    title = dendrogram_title
+    if color_clusters is not None:
+        title += f" ({color_clusters} clusters colored)"
+    ax_dendro.set_title(title, loc="center")
 
     # --- Annotation Heatmap 1: Cluster Labels ---
     ax_heatmap_clusters = fig.add_subplot(gs[1])
-    cluster_colors = adata_ordered.obs[cluster_labels_key].astype('category').cat.codes
+    cluster_colors = adata_ordered.obs[
+        cluster_labels_key
+    ].astype("category").cat.codes
     # Use a colormap with enough distinct colors
-    cmap_clusters = plt.get_cmap('Paired', len(np.unique(cluster_colors)))
+    cmap_clusters = plt.get_cmap("Paired", len(np.unique(cluster_colors)))
     sns.heatmap(
         cluster_colors.to_frame(),
         ax=ax_heatmap_clusters,
@@ -524,7 +727,7 @@ def plot_dendro_heatmap(
 
     # --- Annotation Heatmap 2: Batch/Sample Origin ---
     ax_heatmap_batch = fig.add_subplot(gs[2])
-    batch_colors = adata_ordered.obs['batch'].astype('category').cat.codes
+    batch_colors = adata_ordered.obs["batch"].astype("category").cat.codes
     cmap_batch = plt.get_cmap("coolwarm", len(np.unique(batch_colors)))
     sns.heatmap(
         batch_colors.to_frame(),
@@ -539,14 +742,15 @@ def plot_dendro_heatmap(
     ax_heatmap_genes = fig.add_subplot(gs[3])
     
     try:
-        # Get expression data for marker genes. Using .raw to get non-scaled data if available.
+        # Get expression data for marker genes. Using .raw to get non-scaled
+        # data if available.
         if adata.raw is not None:
             expr_data = adata_ordered.raw[:, valid_marker_genes].X
-            if hasattr(expr_data, 'toarray'):
+            if hasattr(expr_data, "toarray"):
                 expr_data = expr_data.toarray()
         else:
             expr_data = adata_ordered[:, valid_marker_genes].X
-            if hasattr(expr_data, 'toarray'):
+            if hasattr(expr_data, "toarray"):
                 expr_data = expr_data.toarray()
         
         print(f"Expression data shape: {expr_data.shape}")
@@ -574,7 +778,9 @@ def plot_dendro_heatmap(
             cbar_kws={"label": "Scaled Expression"}
         )
         ax_heatmap_genes.set_xticks(np.arange(len(valid_marker_genes)) + 0.5)
-        ax_heatmap_genes.set_xticklabels(valid_marker_genes, rotation=90, ha="center")
+        ax_heatmap_genes.set_xticklabels(
+            valid_marker_genes, rotation=90, ha="center"
+        )
         
     except Exception as e:
         print(f"Error creating gene expression heatmap: {e}")
@@ -584,6 +790,33 @@ def plot_dendro_heatmap(
 
     plt.tight_layout(pad=0.5, w_pad=0.5)
     plt.show()
+
+
+# Alternative helper function for easier cluster coloring
+def plot_dendro_heatmap_with_clusters(
+        adata,
+        Z,
+        cluster_labels_key,
+        dendrogram_title,
+        marker_genes,
+        num_clusters
+    ):
+    """
+    Wrapper function with simpler interface for cluster coloring.
+    
+    Parameters
+    ----------
+    dendro_clusters : int
+        Number of clusters to color in the dendrogram (default: 3)
+    """
+    return plot_dendro_heatmap(
+        adata=adata,
+        Z=Z,
+        cluster_labels_key=cluster_labels_key,
+        dendrogram_title=dendrogram_title,
+        marker_genes=marker_genes,
+        color_clusters=num_clusters
+    )
 
 
 def hierarchical_clustering(
@@ -600,8 +833,56 @@ def hierarchical_clustering(
         scale_max_val : int = 10,
         dendrogram_limit: int = 50,
         clustermap_limit: Optional[int] = None,
+        markers_per_clust: int = 5,
         seed : int = 42,
     ):
+    """
+    Perform hierarchical clustering on single-cell data with batch correction,
+    PCA, nearest neighbors, noise detection using DBSCAN, and visualization.
+
+    Parameters
+    ----------
+    batches : list[sc.AnnData]
+        List of AnnData objects, each representing a batch of single-cell data.
+    batch_keys : list[str]
+        List of keys corresponding to each batch in the batches list.
+    num_clusters : int
+        Number of clusters to extract from the hierarchical clustering.
+    min_pts : int
+        Minimum number of points in a neighborhood for DBSCAN.
+    eps : float
+        The maximum distance between two samples for one to be considered as
+        in the neighborhood of the other in DBSCAN.
+    n_pcs : Optional[int]
+        Number of principal components to use for PCA. If None, will be
+        determined automatically using the elbow method.
+    m : Optional[int]
+        Number of cells to downsample from each batch. If None, all cells are
+        used.
+    n : Optional[int]
+        Number of most variable genes to select. If None, all genes are used.
+    embedding_method : str
+        Method to use for embedding the data before DBSCAN. Options are 'PCA',
+        'tSNE', or 'UMAP'. Default is 'PCA'.
+    n_neighbors : int
+        Number of neighbors to use for constructing the nearest neighbors graph.
+    scale_max_val : int
+        Maximum value for scaling the data. Default is 10.
+    dendrogram_limit : int
+        Limit for the dendrogram plot to show only the top levels.
+    clustermap_limit : Optional[int]
+        Limit for the clustermap to show only a subset of cells. If None, all
+        cells are used.
+    markers_per_clust : int
+        Number of top marker genes to extract per cluster.
+    seed : int
+        Random seed for reproducibility.
+
+    Returns
+    -------
+    list[str]
+        List of top marker genes identified from the hierarchical clustering.
+    """
     np.random.seed(seed)
 
     # --- Step 1: Preprocess and Batch correction ---
@@ -615,7 +896,9 @@ def hierarchical_clustering(
         new_batches.append(batata)
         del batata
         gc.collect()
-    batches = scanorama.correct_scanpy(new_batches, return_dimred=False, verbose=False)
+    batches = scanorama.correct_scanpy(
+        new_batches, return_dimred=False, verbose=False
+    )
     del new_batches
     gc.collect()
     adata = ad.concat(
@@ -715,7 +998,9 @@ def hierarchical_clustering(
         key_added="rank_genes_hclust"
     )
     # Debug: Check if rank_genes_groups worked
-    print("Rank genes groups results keys:", adata.uns["rank_genes_hclust"].keys())
+    print(
+        "Rank genes groups results keys:", adata.uns["rank_genes_hclust"].keys()
+    )
     # Get marker genes more robustly
     try:
         marker_df = pd.DataFrame(adata.uns["rank_genes_hclust"]["names"])
@@ -725,15 +1010,24 @@ def hierarchical_clustering(
         # Get top markers, ensuring we have valid genes
         top_markers = []
         for col in marker_df.columns:
-            top_markers.extend(marker_df[col].head(5).tolist())  # Top 5 from each cluster
+            # Top 5 from each cluster
+            top_markers.extend(marker_df[col].head(markers_per_clust).tolist())
         # Remove duplicates and None values
-        top_markers = [gene for gene in list(set(top_markers)) if gene is not None and str(gene) != 'nan']
+        top_markers = [
+            gene for gene in list(set(top_markers))
+            if gene is not None and str(gene) != "nan"
+        ]
         print(f"Total unique top marker genes found: {len(top_markers)}")
         if len(top_markers) == 0:
-            print("WARNING: No marker genes found! Using most variable genes instead...")
+            print(
+                "WARNING: No marker genes found! "
+                "Using most variable genes instead..."
+            )
             # Fallback to highly variable genes
-            if hasattr(adata.var, 'highly_variable'):
-                top_markers = list(adata.var_names[adata.var.highly_variable][:20])
+            if hasattr(adata.var, "highly_variable"):
+                top_markers = list(
+                    adata.var_names[adata.var.highly_variable][:20]
+                )
             else:
                 # Ultimate fallback - just use first 20 genes
                 top_markers = list(adata.var_names[:20])
@@ -749,10 +1043,16 @@ def hierarchical_clustering(
     # --- Step 6: Plotting ---
     print("--- Plotting ---")
     # Step 6.1 Plot truncated dendrogram
+    color_threshold = Z[-num_clusters+1, 2]
     plt.figure(figsize=(12, 6))
     sch.dendrogram(
-        Z, truncate_mode="level", p=dendrogram_limit,
-        leaf_rotation=90
+        Z,
+        truncate_mode="lastp",
+        p=dendrogram_limit,
+        leaf_rotation=90,
+        orientation="top",
+        color_threshold=color_threshold,
+        above_threshold_color="grey",
     )
     plt.title(f"Truncated Dendrogram (Top {dendrogram_limit} Levels)")
     plt.xlabel("Clustered Cells")
@@ -773,12 +1073,13 @@ def hierarchical_clustering(
 
     # Step 6.3: better plots with marker genes
     print(f"Top marker genes for visualization: {top_markers[:10]}...")
-    plot_dendro_heatmap(
+    plot_dendro_heatmap_with_clusters(
         adata=adata,
         Z=Z,
         cluster_labels_key="hierarchical_clusters",
         dendrogram_title=f"Hierarchical Clustering (m={m}, n={n})",
-        marker_genes=top_markers
+        marker_genes=top_markers,
+        num_clusters=num_clusters
     )
     sc.pl.rank_genes_groups_heatmap(
         adata,
@@ -792,6 +1093,25 @@ def hierarchical_clustering(
         dendrogram=True
     ) 
     plt.show()
+
+    # Step 6.4: Plot UMAP with clusters and marker genes
+    try:
+        sc.tl.umap(adata, random_state=seed)
+    except UserWarning as e:
+        print(e)
+        print("Increasing number of neighbors to 30 for UMAP...")
+        sc.pp.neighbors(adata, n_neighbors=30, n_pcs=n_pcs)
+    colors = ["hierarchical_clusters"] + top_markers
+    titles = ["Hierarchical Clusters"] + top_markers
+    sc.pl.umap(
+        adata,
+        color=colors,
+        title=titles,
+        show=False
+    )
+    plt.suptitle("UMAP with Hierarchical Clusters and Top Marker Genes")
+    plt.tight_layout()
+    plt.show()
     print("---\n")
 
     # --- Step 7: Cleanup ---
@@ -803,3 +1123,5 @@ def hierarchical_clustering(
     del Y
     del Z
     gc.collect()
+
+    return top_markers

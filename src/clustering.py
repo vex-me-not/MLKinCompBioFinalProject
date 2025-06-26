@@ -420,176 +420,6 @@ def run_dbscan_opt(
     gc.collect()
 
 
-# def plot_dendro_heatmap(
-#         adata,
-#         Z,
-#         cluster_labels_key,
-#         dendrogram_title,
-#         marker_genes,
-#         num_clusters
-#     ):
-#     """
-#     Recreates a figure similar to the first example: a horizontal dendrogram
-#     aligned with heatmaps for annotations and marker gene expression.
-
-#     Parameters
-#     ----------
-#     adata : sc.AnnData)
-#         Annotated data object.
-#     Z : np.ndarray
-#         The linkage matrix from hierarchical clustering.
-#     cluster_labels_key : str
-#         The key in adata.obs for the cluster labels.
-#     dendrogram_title : str
-#         Title for the plot.
-#     marker_genes : list
-#         A list of marker genes to plot in the heatmap.
-#     output_path : str
-#         Path to save the figure.
-#     """
-#     print("Generating dendrogram with aligned heatmaps...")
-    
-#     # Debug: Check marker genes
-#     print(f"Number of marker genes provided: {len(marker_genes)}")
-#     print(f"First 10 marker genes: {marker_genes[:10]}")
-    
-#     # Filter marker genes to only those present in the data
-#     available_genes = list(adata.var_names)
-#     valid_marker_genes = [
-#         gene for gene in marker_genes if gene in available_genes
-#     ]
-    
-#     print(
-#         f"Number of valid marker genes found in data: {len(valid_marker_genes)}"
-#     )
-
-#     if len(valid_marker_genes) == 0:
-#         print("ERROR: No marker genes found in the data!")
-#         print(f"Available genes in data: {available_genes[:20]}...")
-#         print("Skipping gene expression heatmap...")
-#         return
-    
-#     # Limit to top genes if too many
-#     if len(valid_marker_genes) > 50:
-#         valid_marker_genes = valid_marker_genes[:50]
-#         print(f"Limited to top 50 marker genes for visualization")
-    
-#     # Get the order of cells from the dendrogram
-#     with plt.rc_context({"lines.linewidth": 0.5}):
-#         dendro = sch.dendrogram(Z, no_plot=True)
-#     dendro_order = dendro["leaves"]
-    
-#     # Reorder adata based on the dendrogram
-#     adata_ordered = adata[dendro_order, :].copy()
-
-#     # --- Create the figure layout ---
-#     # We use GridSpec for precise control over subplot placement.
-#     # We'll have one wide column for the dendrogram and several narrow columns
-#     # for heatmaps.
-#     fig = plt.figure(figsize=(20, 15))
-#     gs = gridspec.GridSpec(1, 4, width_ratios=[1.5, 0.2, 0.2, 2])
-    
-#     # --- Dendrogram Panel ---
-#     ax_dendro = fig.add_subplot(gs[0])
-#     with plt.rc_context({"lines.linewidth": 0.7}):
-#         sch.dendrogram(
-#             Z,
-#             ax=ax_dendro,
-#             orientation="left",
-#             labels=adata_ordered.obs.index,
-#             distance_sort="descending",
-#             show_leaf_counts=False,
-#             leaf_font_size=0 # Hide leaf labels
-#         )
-#     ax_dendro.spines["top"].set_visible(False)
-#     ax_dendro.spines["right"].set_visible(False)
-#     ax_dendro.spines["bottom"].set_visible(False)
-#     ax_dendro.spines["left"].set_visible(False)
-#     ax_dendro.set_xticks([])
-#     ax_dendro.set_yticks([])
-#     ax_dendro.set_title(dendrogram_title, loc="center")
-
-#     # --- Annotation Heatmap 1: Cluster Labels ---
-#     ax_heatmap_clusters = fig.add_subplot(gs[1])
-#     cluster_colors = adata_ordered.obs[
-#         cluster_labels_key
-#     ].astype("category").cat.codes
-#     # Use a colormap with enough distinct colors
-#     cmap_clusters = plt.get_cmap("Paired", len(np.unique(cluster_colors)))
-#     sns.heatmap(
-#         cluster_colors.to_frame(),
-#         ax=ax_heatmap_clusters,
-#         cmap=cmap_clusters,
-#         cbar=False,
-#         yticklabels=False
-#     )
-#     ax_heatmap_clusters.set_xticklabels(["Cluster"], rotation=90)
-
-#     # --- Annotation Heatmap 2: Batch/Sample Origin ---
-#     ax_heatmap_batch = fig.add_subplot(gs[2])
-#     batch_colors = adata_ordered.obs["batch"].astype("category").cat.codes
-#     cmap_batch = plt.get_cmap("coolwarm", len(np.unique(batch_colors)))
-#     sns.heatmap(
-#         batch_colors.to_frame(),
-#         ax=ax_heatmap_batch,
-#         cmap=cmap_batch,
-#         cbar=False,
-#         yticklabels=False
-#     )
-#     ax_heatmap_batch.set_xticklabels(["Batch"], rotation=90)
-
-#     # --- Gene Expression Heatmap ---
-#     ax_heatmap_genes = fig.add_subplot(gs[3])
-    
-#     try:
-#         # Get expression data for marker genes. Using .raw to get non-scaled
-#         # data if available.
-#         if adata.raw is not None:
-#             expr_data = adata_ordered.raw[:, valid_marker_genes].X
-#             if hasattr(expr_data, "toarray"):
-#                 expr_data = expr_data.toarray()
-#         else:
-#             expr_data = adata_ordered[:, valid_marker_genes].X
-#             if hasattr(expr_data, "toarray"):
-#                 expr_data = expr_data.toarray()
-        
-#         print(f"Expression data shape: {expr_data.shape}")
-        
-#         # Check if we have valid expression data
-#         if expr_data.size == 0:
-#             print("ERROR: Expression data is empty!")
-#             return
-        
-#         # Ensure expr_data is 2D
-#         if expr_data.ndim == 1:
-#             expr_data = expr_data.reshape(-1, 1)
-        
-#         # Standardize each gene's expression for visualization
-#         # Use with_mean=True for proper standardization
-#         expr_data_scaled = StandardScaler().fit_transform(expr_data)
-        
-#         print(f"Scaled expression data shape: {expr_data_scaled.shape}")
-        
-#         sns.heatmap(
-#             expr_data_scaled,
-#             ax=ax_heatmap_genes,
-#             cmap="bwr",
-#             yticklabels=False,
-#             cbar_kws={"label": "Scaled Expression"}
-#         )
-#         ax_heatmap_genes.set_xticks(np.arange(len(valid_marker_genes)) + 0.5)
-#         ax_heatmap_genes.set_xticklabels(
-#             valid_marker_genes, rotation=90, ha="center"
-#         )
-        
-#     except Exception as e:
-#         print(f"Error creating gene expression heatmap: {e}")
-#         print("Skipping gene expression heatmap...")
-#         # Remove the gene heatmap subplot and adjust layout
-#         ax_heatmap_genes.remove()
-
-#     plt.tight_layout(pad=0.5, w_pad=0.5)
-#     plt.show()
 def plot_dendro_heatmap(
         adata,
         Z,
@@ -817,6 +647,169 @@ def plot_dendro_heatmap_with_clusters(
         marker_genes=marker_genes,
         color_clusters=num_clusters
     )
+
+
+def plot_combined_clustermap(
+    adata,
+    Z_cells,
+    cluster_labels_key,
+    batch_key,
+    plot_title,
+    marker_genes,
+    num_clusters_for_coloring
+):
+    """
+    Generates the final, polished combined clustermap.
+
+    This version includes:
+    - Coloring on both cell and gene dendrograms.
+    - Correctly positioned annotation labels.
+    - Horizontal AND vertical dashed lines to separate clusters.
+    """
+    print("Generating final polished clustermap with cluster separators...")
+
+    # --- 1. Validate and filter marker genes ---
+    available_genes = list(adata.var_names)
+    valid_marker_genes = [g for g in marker_genes if g in available_genes]
+    if not valid_marker_genes:
+        print("ERROR: No valid marker genes found in the data. Skipping plot.")
+        return
+    
+    if len(valid_marker_genes) > 100:
+        print(f"Warning: Limiting to 100 genes for visualization.")
+        valid_marker_genes = valid_marker_genes[:100]
+
+    # --- 2. Order cells based on the provided cell dendrogram (Z_cells) ---
+    with plt.rc_context({"lines.linewidth": 0.5}):
+        dendro_cells = sch.dendrogram(Z_cells, no_plot=True)
+    cell_order_indices = dendro_cells["leaves"]
+    adata_ordered_cells = adata[cell_order_indices, :].copy()
+
+    # --- 3. Cluster genes based on their expression patterns ---
+    expr_data = adata_ordered_cells[:, valid_marker_genes].X
+    if hasattr(expr_data, "toarray"):
+        expr_data = expr_data.toarray()
+    
+    expr_data_scaled = StandardScaler().fit_transform(expr_data)
+    Z_genes = sch.linkage(expr_data_scaled.T, method="ward", metric="euclidean")
+    with plt.rc_context({"lines.linewidth": 0.5}):
+        dendro_genes = sch.dendrogram(Z_genes, no_plot=True)
+    gene_order_indices = dendro_genes["leaves"]
+    
+    genes_ordered = [valid_marker_genes[i] for i in gene_order_indices]
+    expr_data_final_ordered = expr_data_scaled[:, gene_order_indices]
+
+    # --- 4. Create the plot layout using GridSpec ---
+    fig = plt.figure(figsize=(22, 20))
+    gs = gridspec.GridSpec(
+        2, 4,
+        width_ratios=[1.5, 0.2, 0.2, 6],
+        height_ratios=[1, 6],
+        wspace=0.0, hspace=0.0 
+    )
+
+    ax_cell_dendro = fig.add_subplot(gs[1, 0])
+    ax_annot_cluster = fig.add_subplot(gs[1, 1])
+    ax_annot_batch = fig.add_subplot(gs[1, 2])
+    ax_heatmap = fig.add_subplot(gs[1, 3])
+    ax_gene_dendro = fig.add_subplot(gs[0, 3])
+    cbar_ax = fig.add_axes([0.93, 0.25, 0.015, 0.5])
+
+    # --- 5. Plot each component ---
+    # (a) Cell Dendrogram (Left)
+    color_threshold_cells = Z_cells[-(num_clusters_for_coloring-1), 2]
+    with plt.rc_context({"lines.linewidth": 0.8}):
+        sch.dendrogram(
+            Z_cells, ax=ax_cell_dendro, orientation="left",
+            distance_sort="descending", color_threshold=color_threshold_cells,
+            above_threshold_color="lightgray"
+        )
+    ax_cell_dendro.spines[:].set_visible(False)
+    ax_cell_dendro.set_xticks([])
+    ax_cell_dendro.set_yticks([])
+    fig.suptitle(plot_title, fontsize=16, y=0.92)
+
+    # (b) Cell Annotation Heatmaps (Middle)
+    cluster_codes = adata_ordered_cells.obs[
+        cluster_labels_key
+    ].astype("category").cat.codes
+    cmap_clusters = plt.get_cmap("Paired", len(cluster_codes.unique()))
+    sns.heatmap(
+        cluster_codes.to_frame(), ax=ax_annot_cluster, cmap=cmap_clusters,
+        cbar=False, xticklabels=True, yticklabels=False
+    )
+    ax_annot_cluster.set_xticklabels(["Cluster"], rotation=90)
+    ax_annot_cluster.set_ylabel("")
+    for label in ax_annot_cluster.get_xticklabels():
+        label.set_verticalalignment("top")
+
+    batch_codes = adata_ordered_cells.obs[
+        batch_key
+    ].astype("category").cat.codes
+    cmap_batch = plt.get_cmap("PiYG", len(batch_codes.unique()))
+    sns.heatmap(
+        batch_codes.to_frame(), ax=ax_annot_batch, cmap=cmap_batch,
+        cbar=False, xticklabels=True, yticklabels=False
+    )
+    ax_annot_batch.set_xticklabels(["Batch"], rotation=90)
+    ax_annot_batch.set_ylabel("")
+    for label in ax_annot_batch.get_xticklabels():
+        label.set_verticalalignment("top")
+
+    # (c) Gene Dendrogram (Top)
+    color_threshold_genes = Z_genes[-(num_clusters_for_coloring - 1), 2]
+    with plt.rc_context({"lines.linewidth": 0.8}):
+        sch.dendrogram(
+            Z_genes, ax=ax_gene_dendro, orientation="top",
+            distance_sort="descending",
+            color_threshold=color_threshold_genes,
+            above_threshold_color="lightgray"
+        )
+    ax_gene_dendro.spines[:].set_visible(False)
+    ax_gene_dendro.set_xticks([])
+    ax_gene_dendro.set_yticks([])
+
+    # (d) Main Expression Heatmap (Center)
+    sns.heatmap(
+        expr_data_final_ordered, ax=ax_heatmap, cmap="bwr",
+        yticklabels=False, xticklabels=genes_ordered,
+        cbar_ax=cbar_ax, cbar_kws={"label": "Scaled Expression"}
+    )
+    ax_heatmap.set_xticklabels(
+        ax_heatmap.get_xticklabels(), rotation=90, ha="center"
+    )
+    ax_heatmap.set_ylabel("")
+    plt.setp(ax_heatmap.get_xticklabels(), fontsize=8)
+
+    # (e) Add separator lines for cell and gene clusters
+    # Add horizontal lines for cell clusters
+    cell_clusters_ordered_vals = adata_ordered_cells.obs[
+        cluster_labels_key
+    ].cat.codes.values
+    cluster_boundaries = np.where(
+        cell_clusters_ordered_vals[:-1] != cell_clusters_ordered_vals[1:]
+    )[0] + 1
+    for boundary in cluster_boundaries:
+        ax_heatmap.axhline(
+            y=boundary, color="black", linewidth=1.0, linestyle="--"
+        )
+
+    # NEW: Add vertical lines for gene clusters
+    num_gene_clusters = num_clusters_for_coloring
+    gene_cluster_labels = sch.fcluster(
+        Z_genes, t=num_gene_clusters, criterion="maxclust"
+    )
+    ordered_gene_cluster_labels = gene_cluster_labels[gene_order_indices]
+    gene_boundaries = np.where(
+        ordered_gene_cluster_labels[:-1] != ordered_gene_cluster_labels[1:]
+    )[0] + 1
+    for boundary in gene_boundaries:
+        ax_heatmap.axvline(
+            x=boundary, color="black", linewidth=1.0, linestyle="--"
+        )
+
+    fig.tight_layout(rect=[0, 0, 0.92, 0.9])
+    plt.show()
 
 
 def hierarchical_clustering(
@@ -1093,7 +1086,17 @@ def hierarchical_clustering(
         dendrogram=True
     ) 
     plt.show()
-
+    # test
+    plot_combined_clustermap(
+        adata=adata,
+        Z_cells=Z,  # Pass the cell linkage matrix
+        cluster_labels_key="hierarchical_clusters",
+        batch_key="batch",  # This key is set during adata concatenation
+        plot_title=f"Hierarchical Clustermap (m={m}, n={n})",
+        marker_genes=top_markers,
+        num_clusters_for_coloring=num_clusters
+    )
+    # end test
     # Step 6.4: Plot UMAP with clusters and marker genes
     try:
         sc.tl.umap(adata, random_state=seed)

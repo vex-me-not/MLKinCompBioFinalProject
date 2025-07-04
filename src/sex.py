@@ -130,23 +130,6 @@ class EarlyStopping:
             study.stop()
             print(f"--> Best trial is {study.best_trial.number} with value: {study.best_trial.value} and parameters: {study.best_trial.params}\n")
 
-class ColumnSelector(BaseEstimator, TransformerMixin):
-    """
-    This class implements the columns selection functionality. In simpler terms, with this class we are able to include the 
-    feature selection phase of our model to a pipeline
-    """    
-    # the constructor of the class
-    def __init__(self, columns):
-        self.columns=columns
-
-    # the fit method of the class needed for the pipeline
-    def fit(self, x, y=None):
-        return self
-
-    # the transform method of the class, needed for the pipeline
-    def transform(self, x):
-        return x[self.columns]
-
 class rnCV():
 
     """
@@ -160,7 +143,6 @@ class rnCV():
         self.N=n
         self.K=k
         self.x, self.y=keep_features(data_df=data_df,target='sex',to_drop='gene_identifier')
-        # self.y= encode(self.y)
         self.estimators=estimators
         self.params=params
         self.random_state=random_state
@@ -213,13 +195,6 @@ class rnCV():
                 x_k_train, x_val = x_train.iloc[k_train_idx], x_train.iloc[k_val_idx]
                 y_k_train, y_val = y_train.iloc[k_train_idx], y_train.iloc[k_val_idx]
                 
-                # we impute and scale here as to avoid data leakage
-                # x_k_train=impute(x_k_train)
-                # x_k_train=scale_data(x_k_train)
-                
-                # x_val=impute(x_val)
-                # x_val=scale_data(x_val)
-
                 # we fit and we predict
                 model.fit(x_k_train, y_k_train)
                 preds=model.predict(x_val)
@@ -264,13 +239,6 @@ class rnCV():
                     best_params=self._tune_model(x_train=x_n_train,y_train= y_n_train,model_name=model_name)
 
                     model=self.estimators[model_name](**best_params)
-
-                    # # we impute and scale here, as to avoid data leakage
-                    # x_n_train=impute(x_n_train)
-                    # x_n_train=scale_data(x_n_train)
-                    
-                    # x_n_test=impute(x_n_test)
-                    # x_n_test=scale_data(x_n_test)
                     
                     # we fit and we predict
                     model.fit(x_n_train, y_n_train)
@@ -304,13 +272,6 @@ class rnCV():
                 x_tune_train, x_tune_val= x_tune.iloc[tune_train_idx], x_tune.iloc[tune_val_idx]
                 y_tune_train, y_tune_val= y_tune.iloc[tune_train_idx], y_tune.iloc[tune_val_idx]
 
-                # # we impute and scale here, as to avoid data leakage                    
-                # x_tune_train=impute(x_tune_train)
-                # x_tune_train=scale_data(x_tune_train)
-                    
-                # x_tune_val=impute(x_tune_val)
-                # x_tune_val=scale_data(x_tune_val)
-
                 # we fit and we predict
                 model.fit(x_tune_train, y_tune_train)
                 preds=model.predict(x_tune_val)
@@ -343,9 +304,7 @@ def perform_rnCV(path,res_dest='../data/rncv_SEX_summary_results.csv'):
     # we define the estimators to be used
     estimators = {
         'LogisticRegression': LogisticRegression,
-        # 'GaussianNB': GaussianNB,
         'LDA': LinearDiscriminantAnalysis,
-        # 'SVM': SVC,
         'RandomForest': RandomForestClassifier,
         'LightGBM': lgb.LGBMClassifier
     }
@@ -358,14 +317,8 @@ def perform_rnCV(path,res_dest='../data/rncv_SEX_summary_results.csv'):
             'C': trial.suggest_float('C', 1e-3, 1e0, log=True),
             'l1_ratio': trial.suggest_uniform('l1_ratio', 0, 1)
         },
-        # 'GaussianNB': lambda trial: {'var_smoothing': trial.suggest_float('var_smoothing', 1e-2, 1e-1, log=True)},
         'LDA': lambda trial: {'solver':trial.suggest_categorical('solver', ['svd']),
                               'tol':trial.suggest_float('tol', 5*1e-2, 1e-1, log=True)},
-        # 'SVM': lambda trial: {
-        #     'C': trial.suggest_float('C', 5*1e-2, 1e2, log=True),
-        #     'kernel': trial.suggest_categorical('kernel', ['linear', 'rbf']),
-        #     'probability': trial.suggest_categorical('probability', [True])
-        # },
         'RandomForest': lambda trial: {
             'n_estimators': trial.suggest_int('n_estimators', 100, 500),
             'max_depth': trial.suggest_int('max_depth', 5, 15),
@@ -395,9 +348,7 @@ def winner_tuning(df:pd.DataFrame,winner):
     # we define our estimators, same as the ones we used in rnCV
     estimators = {
         'LogisticRegression': LogisticRegression,
-        'GaussianNB': GaussianNB,
         'LDA': LinearDiscriminantAnalysis,
-        'SVM': SVC,
         'RandomForest': RandomForestClassifier,
         'LightGBM': lgb.LGBMClassifier
     }
@@ -410,14 +361,8 @@ def winner_tuning(df:pd.DataFrame,winner):
             'C': trial.suggest_float('C', 1e-3, 1e0, log=True),
             'l1_ratio': trial.suggest_uniform('l1_ratio', 0, 1)
         },
-        'GaussianNB': lambda trial: {'var_smoothing': trial.suggest_float('var_smoothing', 1e-2, 1e-1, log=True)},
         'LDA': lambda trial: {'solver':trial.suggest_categorical('solver', ['svd']),
                               'tol':trial.suggest_float('tol', 5*1e-2, 1e-1, log=True)},
-        'SVM': lambda trial: {
-            'C': trial.suggest_float('C', 5*1e-2, 1e2, log=True),
-            'kernel': trial.suggest_categorical('kernel', ['linear', 'rbf']),
-            'probability': trial.suggest_categorical('probability', [True])
-        },
         'RandomForest': lambda trial: {
             'n_estimators': trial.suggest_int('n_estimators', 100, 500),
             'max_depth': trial.suggest_int('max_depth', 5, 15),
@@ -441,72 +386,6 @@ def winner_tuning(df:pd.DataFrame,winner):
 
     return winner_estim(**winner_params)
 
-
-# method used to clean the data. The title is a tad misleading, as there are also slivers of data exploration as well
-def clean_data(data:pd.DataFrame):
-    df=data
-
-    # we get some general info about our data
-    general_info(df)
-
-    # we find the columns that have missing values and we count the total missing values
-    nan_columns=df.columns[df.isna().any()].tolist()
-    total_nan=(df.isna().sum()).sum()
-
-    # we find the columns that are numeric and we drop the column id from them
-    df_numeric=df.select_dtypes(include=[float, int])
-    df_numeric=df_numeric.drop(columns=['id'])
-
-    # we print some general info before the imputing
-    print(f'Our data consists of {df.shape[1]} columns and {df.shape[0]} entries')
-    print(f'We have {df_numeric.shape[1]} numeric columns. These are {list(df_numeric.columns)}')
-    print(f'{len(nan_columns)} columns have missing values. These columns are : {nan_columns}')
-    print(f'In total we have {total_nan} missing values')
-
-    # we impute our data, thus replacing all NA values
-    df=impute(data_df=df)
-
-    # we check that the imputing has indeed worked
-    nan_columns=df.columns[df.isna().any()].tolist()
-    print(f'We now have {len(nan_columns)} columns with missing values. These columns are : {nan_columns}')
-
-    # we encode our two classes (Malignan -> 1, Benign -> 0)    
-    df=encode(data_df=df,target='sex')
-
-    # we remove the duplicates
-    df=remove_duplicates(df)
-
-    # we check for outliers
-    check_for_outliers(df)
-
-    # but we WON'T remove them, we will just have to treat them
-    print("We WON'T remove the outliers.")
-
-    return df
-
-
-# method that returns some genral info about our dataset
-def general_info(data_df: pd.DataFrame):
-    print(f'Shape of dataset: {data_df.shape} ({data_df.shape[0]} entries and {data_df.shape[1]} columns)')
-    print(f'Data type of the {data_df.shape[1]} columns\n {data_df.dtypes}')
-
-# method used to impute, a.k.a replace NAs
-def impute(data_df: pd.DataFrame):
-    df=data_df
-
-    # we find the numeric columns of the dataframe
-    df_numeric=df.select_dtypes(include=[float, int])
-
-    # we drop id column    
-    if 'id' in df_numeric.columns:
-        df_numeric=df_numeric.drop(columns=['id'])
-
-    # we use the IterativeImputer to impute
-    imp=IterativeImputer(random_state=42)
-    df[df_numeric.columns]=imp.fit_transform(df_numeric)
-
-    return df
-
 def encode(data_df: pd.DataFrame,target='sex'):
     """
     Method used to encode the entries of the column 'diagnosis'
@@ -520,65 +399,6 @@ def encode(data_df: pd.DataFrame,target='sex'):
 
     return df
     
-
-def remove_duplicates(data_df: pd.DataFrame):
-    """
-    We use this function to find and remove any potential duplicates
-    """
-    
-    df=data_df
-   
-    shape_before=df.shape
-    df.drop_duplicates()
-    shape_after=df.shape
-
-    # we check for diffences in the shape. If there are, then the dataset used to have duplicate values
-    if (shape_before[0] != shape_after[0]):
-        print("Before removal of duplicates",shape_before)
-        print("After removal of duplicates",shape_after)
-    else:
-        print("No duplicates in the set")
-    
-    return df
-
-# method used to check for outliers and predict what our data would look like without them
-def check_for_outliers(data_df: pd.DataFrame):
-
-    df=data_df
-   
-    shape_before=df.shape
-    
-    # we drop all the outliers
-    no_outliers=df[(np.abs(stats.zscore(df)) < 3).all(axis=1)]
-
-    shape_after=no_outliers.shape
-
-    # If there are differences in shape, then our dataset had outliers. We suggest what would happen if we were to remove them
-    if (shape_before[0] != shape_after[0]):
-        removed=shape_before[0]-shape_after[0]
-        print("Before removal of outliers",shape_before)
-        class_imbalance(df)
-        print("After removal of outliers",shape_after)
-        class_imbalance(no_outliers)
-        print(f"We could remove {removed} entries ({(removed/shape_before[0])*100:.2f}% of total entries)")
-
-    else:
-        print("No outliers in the set")
-
-# method used to explore the class imbalance of our dataset
-def class_imbalance(data_df: pd.DataFrame,field='sex'):
-    df=data_df
-    order=[0,1] # the order that we want to present our classes
-
-    # we find how many entries per class
-    entries=df[field].value_counts().reindex(order)
-    print(f'Absolute frequencies of field "{field}"')
-    print(entries)
-
-    # the same as above, but in percentage
-    fractions=df[field].value_counts(normalize=True)
-    print(f'Percentage of each class of field "{field}"')
-    print(fractions)
 
 # method used to get the target of each dataset. Raises a ValueError if given target does not exist
 def get_Y(data_df: pd.DataFrame,target='sex'):
@@ -600,151 +420,6 @@ def keep_features(data_df: pd.DataFrame,target='sex',to_drop='gene_identifier'):
     x=data_df.drop(tdrp,axis=1)
 
     return x,Y
-
-# method used to calculate the correlation between each feature and the target. We use thres to filter the non-significant
-def corr_between_target(data_df: pd.DataFrame,target='sex',thres=0.1):
-    x,Y=keep_features(data_df=data_df,target=target,to_drop=['id']) # we get the feature and the target
-    corr=pd.Series(r_regression(x,Y),index=x.columns) # we calculate the correlation of each feature
-    selected=corr[corr.abs() >= thres].index.tolist() # we filter based on thres
-
-    print("We could keep only the most correlated features:")
-    print(selected)
-
-    print(f'If we do, we will go from {x.shape[1]} features to {len(selected)} features,that will be the most correlated')
-
-    print("Returning the features that could be kept")
-    viz_corr_between_target(corr=corr,target='sex') # we visualize the above results 
-
-
-    return selected
-
-# method used to calculate the correlation between the features. We use thres to keep only the most correlated
-def corr_between_features(data_df: pd.DataFrame,target='sex',to_drop=['sex','gene_identifier'],thres=0.8):
-    df=data_df
-
-    # we find our features
-    feats=df.drop(columns=to_drop).columns.to_list() 
-
-    # we calculate the pair-wise correlation between each possible combination
-    corr_matrix=df[feats].corr(method='pearson')
-
-    viz_corr_between_features(corr_matrix=corr_matrix) # we visualize that with the help of heatmap
-    
-    # we keep only the upper half of the correlation matrix, as the lower half is symmetrical
-    corr_pairs=corr_matrix.abs().where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool)).stack().sort_values(ascending=False)
-
-    # we find the higly correlated pairs
-    high_pairs=corr_pairs[corr_pairs>=thres]
-    print('Pairs of high correlation')
-    print(high_pairs)
-
-    high_to_drop=set()
-
-    # if we were to drop, we would drop the second part of the pair
-    for high_pair in high_pairs.index:
-        high_to_drop.add(high_pair[1])
-    
-    print("We could remove these features:")
-    print(high_to_drop)
-
-    high_selected=df.drop(columns=high_to_drop)
-    print(f"If we do, we will go from {len(feats)} features to {len(high_selected.columns)} features")
-    print('Returning the features that could be ignored')
-
-    return high_to_drop
-
-
-# method used to visualize the correlation between features.
-def viz_corr_between_features(corr_matrix):
-    
-    # we visualize with the help of heatmap
-    plt.figure(figsize=(12, 10))
-    
-    sns.heatmap(corr_matrix, cmap=sns.cubehelix_palette(as_cmap=True), center=0,linewidth=.5)
-    
-    plt.title('Heatmap of Correlation between Features')
-    plt.show()
-
-
-# method used to visualizr the correlation between features and target
-def viz_corr_between_target(corr:pd.Series,target='sex'):
-    plt.figure(figsize=(10,6))
-    
-    corr.sort_values().plot(kind='barh',color='salmon')
-    
-    plt.title(f"Feature Correlations with {target}")
-    plt.xlabel("Pearson's Correlation Coefficient")
-    plt.ylabel("Feature")
-    
-    plt.axvline(0, color='black', linestyle='--')
-    
-    plt.show()
-
-# method used to visualize the distribution of the features through boxplots. It plots everything into one plot
-def boxpolt_distro(data_df: pd.DataFrame,to_drop=['sex','gene_identifier']):
-    df=data_df
-
-    feats=df.drop(columns=to_drop).columns.to_list() # our features
-
-    plt.figure(figsize=(12,30))
-
-    # we iterate over the features
-    for i,feat in enumerate(feats,1):
-        plt.subplot(10, 3, i) # the specific position of the feature in plot "grid"
-        sns.boxplot(x=df[feat], color='salmon',flierprops={"marker":"x"}) # the boxplot with the distribution
-        plt.tight_layout()
-    
-    plt.suptitle("Feature Distributions", fontsize=14, y=1.02)
-    plt.show()
-
-# method used to perform pca. In our version, we elected to find how many components explain 95% of the variance. Results in a dataframe
-def perform_pca(data_df: pd.DataFrame):
-    x,Y=keep_features(data_df=data_df,target='sex',to_drop=['gene_identifier']) # we get the features and the target
-
-    data_rescaled=scale_data(x) # we scale the data
-
-    fraction=0.95 # the fraction of variance that we want to be explained
-
-    # we use sklearn's PCA to perform pca
-    pca = PCA(n_components=fraction)
-    pca.fit(data_rescaled)
-    reduced=pca.transform(data_rescaled)
-
-    print(f"{fraction*100}% of the variance can be explained by {pca.n_components_} components")
-    print("The explained variance ratio is: ",(pca.explained_variance_ratio_))
-
-    viz_pca(reduced,Y) # we visualize using just two components, to see whether the class can be seperated
-
-    pca_df=pd.DataFrame(data=reduced)
-    pca_df['sex']=Y.values
-    
-    return pca_df
-
-# method used to scale and transform the data
-def scale_data(data):
-    # we use the RobustScaler as we have outliers and the PowerTransformer to make our data more "normal-like"
-    pipeline = Pipeline([
-    ('scaler', RobustScaler()),  
-    ('transformer', PowerTransformer(method='yeo-johnson'))
-    ])
-    
-    # we fit the pipeline
-    data_rescaled=pipeline.fit_transform(data)
-
-    return data_rescaled
-
-# method used to vizualise two PCA components
-def viz_pca(x,y):
-    plt.figure(figsize=(10, 8))
-    
-    scat = plt.scatter(x[:, 0], x[:, 1], c=y.values, cmap='flare', alpha=0.7) # we use scatterplot for the 2 components
-    plt.legend(*scat.legend_elements(), title="Labels")
-    
-    plt.title("Principal Component Analysis")
-    plt.xlabel("Principal Component 1")
-    plt.ylabel("Principal Component 2")
-    
-    plt.show()
 
 # method used to count how many times item appears in item_list
 def count_apps(item,item_list:list):
@@ -804,8 +479,6 @@ def replace_column(df:pd.DataFrame,to_be_replaced,to_be_added):
     return data_df  
 
 
-
-
 # method used to print the confidence interval of bootstrapping as actual intervals of a single metric
 def metric_ci(y_true, y_pred, metric, is_proba=False, proba=None, n_samples=5000, seed=42):
     
@@ -840,19 +513,9 @@ def bootstrap_model_intervals(df_dev:pd.DataFrame,df_val:pd.DataFrame, model):
 
     # we get the x and y of the dev set
     x_dev, y_dev=keep_features(data_df=df_dev,target='sex',to_drop='gene_identifier')
-    # y_dev=encode(y_dev)
-
-    # we scale and we impute here as to avoid data leakage
-    # x_dev=impute(x_dev)
-    # x_dev=scale_data(x_dev)
 
     # we get the x and y of the val set    
     x_val, y_val=keep_features(data_df=df_val,target='sex',to_drop='gene_identifier')
-    # y_val=encode(y_val)
-
-    # we scale and we impute here as to avoid data leakage
-    # x_val=impute(x_val)
-    # x_val=scale_data(x_val)
 
     # we fit the model on dev
     model.fit(x_dev,y_dev)
@@ -925,19 +588,9 @@ def bootstrap_model_plot(df_dev:pd.DataFrame,df_val:pd.DataFrame, model):
 
     # we get the x and y of the dev set
     x_dev, y_dev=keep_features(data_df=df_dev,target='sex',to_drop='gene_identifier')
-    # y_dev=encode(y_dev)
-
-    # we impute and we scale here as to avoid data leakage
-    # x_dev=impute(x_dev)
-    # x_dev=scale_data(x_dev)
 
     # we get the x and y of the val set    
     x_val, y_val=keep_features(data_df=df_val,target='sex',to_drop='gene_identifier')
-    # y_val=encode(y_val)
-
-    # we impute and we scale here as to avoid data leakage
-    # x_val=impute(x_val)
-    # x_val=scale_data(x_val)
 
     # we fit the model on dev dataset
     model.fit(x_dev,y_dev)
@@ -991,32 +644,16 @@ def save_winner(train_path,test_path,winner,winner_name,saved_name='SEX_winner')
 
     # we get the x and y of the given dataset
     x_full,y_full=keep_features(data_df=df_train)
-    # y_full=encode(y_full)
 
     del df_train,df_test,common_columns
     # we drop the target from the features
-    # x_full=df.drop(columns="class")
 
     # we save the features we used so that the pipeline may use them during inference
     feature_columns=x_full.columns.tolist()
     joblib.dump(feature_columns, "../models/SEX_feature_columns.pkl")
 
-    # the pipeline that handles the scaling and transformation
-    # scale_pipeline=Pipeline([
-    # ('scaler', RobustScaler()),  
-    # ('transformer', PowerTransformer(method='yeo-johnson'))
-    # ])
-
-    # the pipeline that handles the Imputing
-    # preprocessor=Pipeline([
-    #     ('imputer', IterativeImputer(random_state=42)),  
-    #     ('scaler', scale_pipeline)                    
-    # ])
-
     # the complete pipeline that will be saved. It includes column selection, preprocessing and the model
     winner_pipeline=Pipeline([
-        # ('select_columns',ColumnSelector(columns=feature_columns)),
-        # ('preproccesing',preprocessor),
         ('model',winner)
     ])
 
@@ -1029,121 +666,7 @@ def save_winner(train_path,test_path,winner,winner_name,saved_name='SEX_winner')
     model_io.save(model=winner_pipeline,name=saved_name)
 
 
-# method used to perform inference on the dataset that resides in test_df_path
-def infere_with_winner(test_df_path,saved_name='SEX_winner'):
-
-    # we load the dataset
-    test_df=pd.read_csv(test_df_path)
-
-    # the directory where the winner lies
-    models_dir="../models"
-    model_io=IO(models_dir) # this class will handle the loading
-
-    winner=model_io.load(name=saved_name) # we load the model
-
-    preds=winner.predict(test_df) # we predict
-    
-    # we save the predictions in a dataframe
-    test_df["predicted_class"] = preds
-    print(test_df[["predicted_class"]].head())
-
-    test_df.to_csv('../data/predictions.csv',index=False)
-
-# method used to get the best top coefficients of Logistic Regression. Returns a dataframe
-def get_top_coefficients(top,names,saved_name='SEX_winner'):
-
-    # the directory where the winner lies
-    models_dir="../models"
-    model_io=IO(models_dir) # this class will handle the loading
-
-    winner=model_io.load(name=saved_name) # we load the model
-
-    cf=(winner.named_steps['model'].coef_).flatten() # the coefficients of the model
-    features=names # the name of the features
-
-    # the dataframe to be returned, sorted in descending absolute coefficient value
-    cf_df=pd.DataFrame({
-        'Feature':features,
-        'Coefficient':cf,
-        'abs_coeff': np.abs(cf)
-    }).sort_values(by='abs_coeff',ascending=False)
-
-    print(cf_df.head(top))
-
-    return cf_df
-
-# method used to plot the best top coefficients of LogisticRegression. Needs a dataframe as input
-def plot_best_coefficients(cf_df:pd.DataFrame,top):
-    plt.figure(figsize=(10,6))
-
-    sns.barplot(data=cf_df.head(top),y='Feature',x='Coefficient',palette='magma')
-    
-    plt.axvline(0, color='black', linestyle='--')
-    plt.title(f'Top {top} most influential features (LogisticRegression Coefficients)')
-    
-    plt.tight_layout()
-    plt.show()
-
-# method used to get the most top influentiel coefficients of a Logistic Regression model and plot them
-def top_coefficients_winner(top,names):
-    cf_df=get_top_coefficients(top=top,names=names)
-    plot_best_coefficients(cf_df=cf_df,top=top)
-
-
-
-def get_best_model(path):
-    df=pd.read_csv(path)
-
-    X,y=keep_features(data_df=df,target='sex',to_drop='gene_identifier')
-
-    models = {
-        'LDA': LinearDiscriminantAnalysis(tol=0.1),
-        'LogisticRegression': LogisticRegression(max_iter=1000),
-        'RandomForest': RandomForestClassifier(n_estimators=100),
-        'LightGBM': lgb.LGBMClassifier(verbosity=-1)
-    }
-
-    # Set up CV
-    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-
-    # Store results
-    metrics_summary = []
-
-    for name in tqdm(models, desc="Evaluating models"):
-        model = models[name]
-
-        # Predict class labels with CV
-        y_pred = cross_val_predict(model, X, y, cv=cv, method='predict', n_jobs=-1)
-
-        # Predict probabilities with CV (for ROC_AUC, PR_AUC, NPV, specificity)
-        y_prob = cross_val_predict(model, X, y, cv=cv, method='predict_proba', n_jobs=-1)[:, 1]
-
-        # Confusion matrix for Specificity and NPV
-        tn, fp, fn, tp = confusion_matrix(y, y_pred).ravel()
-
-        specificity = tn / (tn + fp) if (tn + fp) > 0 else 0
-        npv = tn / (tn + fn) if (tn + fn) > 0 else 0
-
-        metrics = {
-            'Model': name,
-            'MCC': matthews_corrcoef(y, y_pred),
-            'ROC_AUC': roc_auc_score(y, y_prob),
-            'Balanced_Accuracy': balanced_accuracy_score(y, y_pred),
-            'F1': f1_score(y, y_pred),
-            'Recall': recall_score(y, y_pred),
-            'Precision': precision_score(y, y_pred),
-            'Specificity': specificity,
-            'NPV': npv,
-            'PR_AUC': average_precision_score(y, y_prob)
-        }
-
-        metrics_summary.append(metrics)
-        print(f"{name}: Done")
-
-    df_results = pd.DataFrame(metrics_summary)
-    df_results.to_csv("simple_model_metrics_summary.csv", index=False)
-
-
+# Method used to explain winner model that can be found in winner_src through SHAP values
 def explain_winner(winner_src,dev_df,val_df,samples_explained,top_k,saved_name='SEX_winner'):
     # the directory where the winner lies
     models_dir=winner_src
@@ -1186,7 +709,7 @@ def explain_winner(winner_src,dev_df,val_df,samples_explained,top_k,saved_name='
     for i in reversed(inds2):
         shap.dependence_plot(i, shap_values, data_valid.iloc[:samples_explained,:])
 
-
+# Method used to isolate the sex info for a specific area and a specifica experiment from a metadata file found in meatadata_path
 def get_sexes(area,experiment,metadata_path):
     
     metadata_df=pd.read_csv(metadata_path)
@@ -1204,6 +727,7 @@ def get_sexes(area,experiment,metadata_path):
     
     sexes.to_csv(save_path,index=False)
 
+# Encode and save the sex info found in sexes_path for a specific area and experiment
 def save_encoded_sex(area,experiment,sexes_path):
     sexes=pd.read_csv(sexes_path)
 
@@ -1213,6 +737,7 @@ def save_encoded_sex(area,experiment,sexes_path):
 
     sexes.to_csv(save_path,index=False)
 
+# Augment the anndata file at adata_path with the encoded sex info at encoded_sex_path and save it at dest_path
 def create_sexed_adata(adata_path,encoded_sex_path,dest_path):
     
     adata=anndata.read_h5ad(adata_path)
@@ -1227,6 +752,8 @@ def create_sexed_adata(adata_path,encoded_sex_path,dest_path):
 
     adata.write(dest_path)
 
+
+# Method used to create a df from an anndata
 def produce_df(hy_path,th_path,verbose=False,test=False):
     hypothalamus=anndata.read_h5ad(hy_path)
 
@@ -1235,7 +762,6 @@ def produce_df(hy_path,th_path,verbose=False,test=False):
         print("\n\n-----Obs header-----\n\n",hypothalamus.obs.head())
         print("\n\n-----Var header-----\n\n",hypothalamus.var.head())
 
-    # hypothalamus.obs['sex'] = 0 # Hypothalamus -> 0
 
     thalamus=anndata.read_h5ad(th_path)
 
@@ -1243,8 +769,6 @@ def produce_df(hy_path,th_path,verbose=False,test=False):
         print(thalamus)
         print("\n\n-----Obs header-----\n\n",thalamus.obs.head())
         print("\n\n-----Var header-----\n\n",thalamus.var.head())
-
-    # thalamus.obs['sex'] = 1 # Thalamus -> 1
 
     adata_combined = thalamus.concatenate(hypothalamus, batch_key='source', batch_categories=['thalamus', 'hypothalamus'])
 
@@ -1281,6 +805,7 @@ def produce_df(hy_path,th_path,verbose=False,test=False):
 
     return X_df
 
+# Create
 def sex_specific_region(region_path,verbose=False,test=False):
     region=anndata.read_h5ad(region_path)
 
@@ -1307,7 +832,6 @@ def sex_specific_region(region_path,verbose=False,test=False):
     region = region[:, region.var['highly_variable']]
 
     X = region.X.toarray() if not isinstance(region.X, np.ndarray) else region.X
-    # X = adata_combined.X
     y = region.obs['sex'].values
 
     print(region.var_names)

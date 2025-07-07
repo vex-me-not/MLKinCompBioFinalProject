@@ -1,7 +1,7 @@
 # MLKinCompBioFinalProject
 Code base for the final Project of the MLiCB course
 
-## Team members
+## Team members (Machine Learning Killers)
 
 <li>Charisis Nikolaos, ID: 7115152400008 </li>
 <li>Chatzitolios Vasileios-Klearchos, ID: 7115152400026</li>

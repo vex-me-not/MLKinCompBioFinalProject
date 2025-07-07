@@ -1,8 +1,11 @@
 # MLKinCompBioFinalProject
 Code base for the final Project of the MLiCB course
 
+## Team members
 
-
+<li>Charisis Nikolaos, ID: 7115152400008 </li>
+<li>Chatzitolios Vasileios-Klearchos, ID: 7115152400026</li>
+<li>Konstantinidis Konstantinos, ID: 7115152400017</li>
 
 ## Env.
 ```python

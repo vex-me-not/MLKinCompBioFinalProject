@@ -8,7 +8,9 @@
 !*/
 
 # EXCEPT
-# !*.csv
+!rncv_summary_results.csv
+!rncv_SEX_summary_results_HY.csv
+!baseline_accuracy_summary.csv
 # the .gitignore file
 !.gitignore
 # everything that is a jupyter notebook 
@@ -24,6 +26,7 @@
 !utils.py
 !preprocessing.py
 !clustering.py
+!sex.py
 !*.pkl
 !*.png
 # Add anything that you should be included but it's not

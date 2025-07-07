@@ -25,6 +25,7 @@
 !functions.py 
 !utils.py
 !preprocessing.py
+!clustering.py
 !sex.py
 !*.pkl
 !*.png
@@ -33,3 +34,4 @@
 
 # Ignore the following
 .env/
+__pycache__/

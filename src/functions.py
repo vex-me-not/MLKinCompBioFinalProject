@@ -41,6 +41,17 @@ warnings.filterwarnings("ignore")
 
 # Method used to download the required datafiles
 def download_data(brain_parts,directories_to_use,metadata_to_use):
+    """Download data from the ABC Atlas project cache.
+
+    Parameters
+    ----------
+    brain_parts : list of str
+        List of brain parts to download data for.
+    directories_to_use : list of str
+        List of directories to use for downloading data.
+    metadata_to_use : list of str
+        List of metadata files to download.
+    """
     download_base = Path('../data/abc_atlas')
     abc_cache = AbcProjectCache.from_cache_dir(download_base)
     
@@ -69,6 +80,17 @@ def download_data(brain_parts,directories_to_use,metadata_to_use):
 
 
 def find_outliers(series):
+    """Find outliers in a pandas Series using the IQR method.
+
+    Parameters
+    ----------
+    series : pd.Series
+        The pandas Series to check for outliers.
+
+            Returns
+    -------
+    pd.Series
+        A boolean Series indicating whether each value is an outlier."""
     
     Q1 = series.quantile(0.25)
     Q3 = series.quantile(0.75)
@@ -299,6 +321,13 @@ class rnCV():
 
 # method used to run the repeated nested cross validation pipeline
 def perform_rnCV(path):
+    """Method used to run the repeated nested cross validation pipeline.
+
+    Parameters
+    ----------
+    path : str
+        The path to the dataset file (CSV format).
+    """
     # we load the given dataset into a data frame
     df=pd.read_csv(path)
 
@@ -345,6 +374,20 @@ def perform_rnCV(path):
 
 # method used to tune the final winner model that we got through rnCV
 def winner_tuning(df:pd.DataFrame,winner):
+    """Method used to tune the winner model that we got through rnCV.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The dataset to be used for tuning the winner model.
+    winner : str
+        The name of the winner model to be tuned (e.g., 'LogisticRegression', 'LDA', 'RandomForest', 'LightGBM').
+    
+    Returns
+    -------
+    BaseEstimator
+        The tuned winner model instance.
+    """
     # we define our estimators, same as the ones we used in rnCV
     estimators = {
         'LogisticRegression': LogisticRegression,
@@ -402,15 +445,51 @@ def encode(data_df: pd.DataFrame,target='class'):
     
 
 
-# method used to get the target of each dataset. Raises a ValueError if given target does not exist
 def get_Y(data_df: pd.DataFrame,target='class'):
+    """Used to get the target column from the dataset.
+
+    Parameters
+    ----------
+    data_df : pd.DataFrame
+        The dataset from which to extract the target column.
+    target : str, optional
+        The name of the target column to extract (default is 'class').
+
+    Returns
+    -------
+    pd.DataFrame
+        A DataFrame containing the target column.
+    
+    Raises
+    ------
+    ValueError
+        If the specified target column does not exist in the DataFrame.
+    """
     if target not in data_df.columns:
         raise ValueError("Please give a valid target!")
     
     return pd.DataFrame(data_df[target])
 
-# method used to keep the features and the target. Return x and y
+
 def keep_features(data_df: pd.DataFrame,target='class',to_drop='gene_identifier'):
+    """Method used to keep the features and the target column in the dataset.
+    
+    Parameters
+    ----------
+    data_df : pd.DataFrame
+        The dataset from which to extract features and target.
+    target : str, optional
+        The name of the target column to extract (default is 'class').
+    to_drop : list, optional
+        List of columns to be dropped from the dataset (default is 'gene_identifier').
+        
+    Returns
+    -------
+    tuple
+        A tuple containing:
+        - x: DataFrame with features (all columns except the target and specified to_drop columns).
+        - Y: DataFrame with the target column.
+    """
     tdrp=[]
     
     # we update our columns to be dropped with the list given
@@ -423,8 +502,22 @@ def keep_features(data_df: pd.DataFrame,target='class',to_drop='gene_identifier'
 
     return x,Y
 
-# method used to count how many times item appears in item_list
+
 def count_apps(item,item_list:list):
+    """Method used to count how many times an item appears in a list.
+    
+    Parameters
+    ----------
+    item : any
+        The item to count in the list.
+    item_list : list
+        The list in which to count the occurrences of the item.
+        
+    Returns
+    -------
+    int
+        The count of occurrences of the item in the list.
+    """
     
     count=0
     
@@ -434,8 +527,20 @@ def count_apps(item,item_list:list):
     
     return count
 
-# method used to count the wins of a method in a summary dataframe
+
 def count_wins(summary:pd.DataFrame):
+    """Method used to count the wins of each model in a summary DataFrame.
+    
+    Parameters
+    ----------
+    summary : pd.DataFrame
+        The DataFrame containing the summary of model performances.
+        
+    Returns
+    -------
+    dict
+        A dictionary where keys are model indices and values are the counts of wins for each model.
+    """
     # we count how many models we have
     total_models=summary.shape[0]
 
@@ -447,8 +552,20 @@ def count_wins(summary:pd.DataFrame):
     
     return dict_app
 
-# we transform the dictionairy we get from count_wins, to dictionairy with {model_name: number_of_wins} entries
+
 def winner_dict(summary:pd.DataFrame):
+    """Method used to create a dictionary of model names and their corresponding win counts from a summary DataFrame.
+
+    Parameters
+    ----------
+    summary : pd.DataFrame
+        The DataFrame containing the summary of model performances, with a 'Model' column for model names.
+
+    Returns
+    -------
+    dict
+        A dictionary where keys are model names and values are the counts of wins for each model.
+    """
     
     model_names=summary['Model']
     sum_no_name=summary.drop(columns='Model')
@@ -460,8 +577,22 @@ def winner_dict(summary:pd.DataFrame):
 
     return win_dict
 
-# method used to get the winner method, along with all the wins it scored
+
 def get_winner(summary:pd.DataFrame):
+    """Method used to get the winner model and its win count from a summary DataFrame.
+    
+    Parameters
+    ----------
+    summary : pd.DataFrame
+        The DataFrame containing the summary of model performances, with a 'Model' column for model names.
+        
+    Returns
+    -------
+    tuple
+        A tuple containing:
+        - winner: The name of the winning model.
+        - win_count: The count of wins for the winning model.
+    """
     win_dict=winner_dict(summary=summary) # we get the dictionairy with all the wins
 
     # we sorted in descending order, based on the values it stores
@@ -470,8 +601,24 @@ def get_winner(summary:pd.DataFrame):
 
     return (winner,sorted_win_dict[winner])
 
-# method used to replace/rename a specific column in a dataframe
+
 def replace_column(df:pd.DataFrame,to_be_replaced,to_be_added):
+    """Method used to replace/rename a specific column in a DataFrame.
+    
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The DataFrame in which to replace the column.
+    to_be_replaced : str
+        The name of the column to be replaced.
+    to_be_added : str
+        The new name for the column to be added.
+        
+    Returns
+    -------
+    pd.DataFrame
+        The DataFrame with the specified column replaced/renamed.
+    """
     data_df=df
     
     # we ensure that the column to be replaced is part of the dataframe and that the new column does not alreadt exist
@@ -481,8 +628,31 @@ def replace_column(df:pd.DataFrame,to_be_replaced,to_be_added):
     return data_df  
 
 
-# method used to print the confidence interval of bootstrapping as actual intervals of a single metric
 def metric_ci(y_true, y_pred, metric, is_proba=False, proba=None, n_samples=5000, seed=42):
+    """Method used to calculate the confidence interval of a metric using bootstrapping.
+    
+    Parameters
+    ----------
+    y_true : array-like
+        The true labels or values.
+    y_pred : array-like
+        The predicted labels or values.
+    metric : callable
+        The metric function to calculate the score (e.g., balanced_accuracy_score, f1_score).
+    is_proba : bool, optional
+        Whether the predictions are probabilities (default is False).
+    proba : array-like, optional
+        The predicted probabilities, if is_proba is True (default is None).
+    n_samples : int, optional
+        The number of bootstrap samples to draw (default is 5000).
+    seed : int, optional
+        The random seed for reproducibility (default is 42).
+
+    Returns
+    -------
+    tuple
+        A tuple containing the lower and upper bounds of the confidence interval.
+    """
     
     rng=np.random.RandomState(seed)
     stats=[]
@@ -500,8 +670,24 @@ def metric_ci(y_true, y_pred, metric, is_proba=False, proba=None, n_samples=5000
     return np.percentile(stats, [2.5, 97.5]) # we return the two ends of the interval
 
 
-# method used to print the confidence interval of bootstrapping as actual intervals([start,end]) of all metrics
+
 def bootstrap_model_intervals(df_dev:pd.DataFrame,df_val:pd.DataFrame, model):
+    """Method used to print the confidence intervals of bootstrapping for various metrics.
+    
+    Parameters
+    ----------
+    df_dev : pd.DataFrame
+        The development dataset used for training the model.
+    df_val : pd.DataFrame
+        The validation dataset used for evaluating the model.
+    model : BaseEstimator
+        The machine learning model to be evaluated.
+
+    Returns
+    -------
+    None
+        Prints the confidence intervals for various metrics and specificity/NPV.
+    """
     # our metrices
     metrics = {
         'Balanced Accuracy': (balanced_accuracy_score, False),
@@ -552,8 +738,29 @@ def bootstrap_model_intervals(df_dev:pd.DataFrame,df_val:pd.DataFrame, model):
     print(f"NPV                 : {npv:.4f}")
 
 
-# method used to calculate the metrics score of all methods need for the violinplot
+
+
 def metric_ci_plot(y_true, y_pred, proba, n_samples=1000, seed=42):
+    """Method used to calculate the confidence intervals of various metrics using bootstrapping.
+    
+    Parameters
+    ----------
+    y_true : array-like
+        The true labels or values.
+    y_pred : array-like
+        The predicted labels or values.
+    proba : array-like
+        The predicted probabilities.
+    n_samples : int, optional
+        The number of bootstrap samples to draw (default is 1000).
+    seed : int, optional
+        The random seed for reproducibility (default is 42).
+
+    Returns
+    -------
+    dict
+        A dictionary containing the bootstrapped scores for various metrics.
+    """
     rng = np.random.RandomState(seed)
     # the scores of each metric
     metrics = {
@@ -585,8 +792,24 @@ def metric_ci_plot(y_true, y_pred, proba, n_samples=1000, seed=42):
 
     return metrics
 
-# method used to plot the confidence intervals of bootstrapping. It used violin plots
+
 def bootstrap_model_plot(df_dev:pd.DataFrame,df_val:pd.DataFrame, model):
+    """Method used to plot the confidence intervals of bootstrapping using violin plots.
+    
+    Parameters
+    ----------
+    df_dev : pd.DataFrame
+        The development dataset used for training the model.
+    df_val : pd.DataFrame
+        The validation dataset used for evaluating the model.
+    model : BaseEstimator
+        The machine learning model to be evaluated.
+
+    Returns
+    -------
+    None
+        Displays a violin plot of the bootstrapped scores for various metrics.
+    """
 
     # we get the x and y of the dev set
     x_dev, y_dev=keep_features(data_df=df_dev,target='class',to_drop='gene_identifier')
@@ -623,13 +846,48 @@ def bootstrap_model_plot(df_dev:pd.DataFrame,df_val:pd.DataFrame, model):
     plt.tight_layout()
     plt.show()
 
-# method used to perform bootstrapping. It prints intervals and visualizes them with violin plots
+
 def bootstrap_model(df_dev:pd.DataFrame,df_val:pd.DataFrame, model):
+    """Method used to perform bootstrapping on a model and plot the confidence intervals.
+    
+    Parameters
+    ----------
+    df_dev : pd.DataFrame
+        The development dataset used for training the model.
+    df_val : pd.DataFrame
+        The validation dataset used for evaluating the model.
+    model : BaseEstimator
+        The machine learning model to be evaluated.
+    
+    Returns
+    -------
+    None
+        Displays the bootstrapped confidence intervals and plots for various metrics.
+    """
     bootstrap_model_intervals(df_dev=df_dev,df_val=df_val,model=model)
     bootstrap_model_plot(df_dev=df_dev,df_val=df_val,model=model)
 
-# method used to save the winner model. It actually saves a pipeline
+
+
 def save_winner(train_path,test_path,winner,winner_name):
+    """Method used to save the winner model after training it on the given dataset.
+    
+    Parameters
+    ----------
+    train_path : str
+        The path to the training dataset (CSV format).
+    test_path : str
+        The path to the testing dataset (CSV format).
+    winner : BaseEstimator
+        The machine learning model to be saved.
+    winner_name : str
+        The name of the winner model to be saved.
+
+    Returns
+    -------
+    None
+        Saves the trained model to a specified directory.
+    """
     # the directory where the pipeline will be saved
     models_dir="../models"
     model_io=IO(models_dir) # class used to handle the actual saving
@@ -668,8 +926,27 @@ def save_winner(train_path,test_path,winner,winner_name):
     # we save the model
     model_io.save(model=winner_pipeline,name='winner')
 
-# Method used to create a df from an anndata
+
+
 def produce_df(hy_path,th_path,verbose=False,test=False):
+    """Method used to create a DataFrame from two anndata files (hypothalamus and thalamus).
+    
+    Parameters
+    ----------
+    hy_path : str
+        The path to the hypothalamus anndata file (H5AD format).
+    th_path : str
+        The path to the thalamus anndata file (H5AD format).
+    verbose : bool, optional
+        Whether to print the AnnData objects and their headers (default is False).
+    test : bool, optional
+        Whether to set a specific random state for reproducibility (default is False).
+
+    Returns
+    -------
+    pd.DataFrame
+        A DataFrame containing the combined data from both anndata files, with features and class labels
+    """
     hypothalamus=anndata.read_h5ad(hy_path)
 
     if verbose is True:
@@ -722,8 +999,28 @@ def produce_df(hy_path,th_path,verbose=False,test=False):
 
     return X_df
 
-# Method used to explain winner model that can be found in winner_src through SHAP values
+
 def explain_winner(winner_src,dev_df,val_df,samples_explained,top_k):
+    """Method used to explain the winner model using SHAP values.
+    
+    Parameters
+    ----------
+    winner_src : str
+        The source directory where the winner model is saved.
+    dev_df : pd.DataFrame
+        The development dataset used for training the model.
+    val_df : pd.DataFrame
+        The validation dataset used for evaluating the model.
+    samples_explained : int
+        The number of samples to explain from the validation set.
+    top_k : int
+        The number of top features to display in the global importance bar chart.
+
+    Returns
+    -------
+    None
+        Displays the global importance of features and SHAP summary plots for the winner model.
+    """
     # the directory where the winner lies
     models_dir=winner_src
     model_io=IO(models_dir) # this class will handle the loading
@@ -765,8 +1062,24 @@ def explain_winner(winner_src,dev_df,val_df,samples_explained,top_k):
     for i in reversed(inds2):
         shap.dependence_plot(i, shap_values, data_valid.iloc[:samples_explained,:])
 
-# Method used to isolate the sex info for a specific area and a specifica experiment from a metadata file found in meatadata_path
+
 def get_sexes(area,experiment,metadata_path):
+    """Method used to extract the sex information for a specific area and experiment from a metadata file.
+    
+    Parameters
+    ----------
+    area : str
+        The anatomical division label (e.g., 'hypothalamus', 'thalamus').
+    experiment : str
+        The dataset label (e.g., 'hypothalamus', 'thalamus').
+    metadata_path : str
+        The path to the metadata CSV file containing the anatomical division and dataset labels.
+
+    Returns
+    -------
+    None
+        Saves the extracted sex information to a CSV file named '{experiment}_sexes_{area}.csv' in the '../data/' directory.
+    """
     
     metadata_df=pd.read_csv(metadata_path)
     metadata_df=metadata_df[metadata_df['anatomical_division_label']==area]
@@ -784,6 +1097,22 @@ def get_sexes(area,experiment,metadata_path):
 
 # Encode and save the sex info found in sexes_path for a specific area and experiment
 def save_encoded_sex(area,experiment,sexes_path):
+    """Method used to encode sex information from a CSV file and save it to a new CSV file.
+    
+    Parameters
+    ----------
+    area : str
+        The anatomical division label (e.g., 'hypothalamus', 'thalamus').
+    experiment : str
+        The dataset label (e.g., 'hypothalamus', 'thalamus').
+    sexes_path : str
+        The path to the CSV file containing the sex information.
+
+    Returns
+    -------
+    None
+        Saves the encoded sex information to a CSV file named '{experiment}ENCODED_sexes_{area}.csv' in the '../data/' directory.
+    """
     sexes=pd.read_csv(sexes_path)
 
     sexes=encode(data_df=sexes,target='donor_sex') # M->1 , F->0
@@ -792,9 +1121,25 @@ def save_encoded_sex(area,experiment,sexes_path):
 
     sexes.to_csv(save_path,index=False)
 
-# Augment the anndata file at adata_path with the encoded sex info at encoded_sex_path and save it at dest_path  
+
 def create_sexed_adata(adata_path,encoded_sex_path,dest_path):
-    
+    """Method used to augment an AnnData object with encoded sex information and save it to a new file.
+
+    Parameters
+    ----------
+    adata_path : str
+        The path to the AnnData file (H5AD format) to be augmented.
+    encoded_sex_path : str
+        The path to the CSV file containing the encoded sex information.
+    dest_path : str
+        The path where the augmented AnnData object will be saved (H5AD format).
+
+    Returns
+    -------
+    None
+        Saves the augmented AnnData object to the specified destination path.
+    """
+
     adata=anndata.read_h5ad(adata_path)
     encoded_sex=pd.read_csv(encoded_sex_path)
 

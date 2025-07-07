@@ -123,6 +123,15 @@ def qc_inspect(
         adata_mem,
         n_top_genes=2000,
     ):
+    """Perform quality control inspection on an AnnData object.
+
+    Parameters
+    ----------
+    adata_mem : AnnData
+        The AnnData object to inspect.
+    n_top_genes : int, default=2000
+        Number of top variable genes to consider for quality control.
+    """
     # qc metrics
     sc.pp.calculate_qc_metrics(adata_mem, inplace=True)
 

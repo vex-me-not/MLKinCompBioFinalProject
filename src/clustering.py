@@ -192,6 +192,35 @@ def run_dbscan_opt(
         noise_threshold_discard: int,
         seed: int
     ):
+    """Run DBSCAN optimization on the provided AnnData object.
+    
+    Parameters
+    ----------
+    adata : sc.AnnData
+        The annotated data object containing single-cell data.
+    n_neighbors : int
+        Number of neighbors to use for nearest neighbor graph.
+    elbow : int
+        Number of principal components to use for PCA.
+    min_pts_values : list
+        List of minimum samples values to test for DBSCAN.
+    eps_values : list
+        List of epsilon values to test for DBSCAN.
+    noise_threshold_penalize : int
+        Percentage of noise points above which to apply a penalty in the
+        composite score.
+    noise_threshold_discard : int
+        Percentage of noise points above which to discard the configuration
+        entirely.
+    seed : int
+        Random seed for reproducibility.
+
+    Returns
+    -------
+    None
+        The function modifies the `adata` object in place, adding DBSCAN
+        clustering results to `adata.obs`.
+    """
     sc.pp.neighbors(adata, n_neighbors=n_neighbors, n_pcs=elbow)
     sc.tl.tsne(adata, random_state=seed)
     sc.tl.umap(adata, random_state=seed)

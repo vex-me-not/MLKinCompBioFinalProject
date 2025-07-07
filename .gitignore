@@ -35,3 +35,4 @@
 # Ignore the following
 .env/
 __pycache__/
+notebooks/test_validation.ipynb

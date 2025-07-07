@@ -143,6 +143,25 @@ def find_elbow_pcs(variance_ratio):
 
 
 def annotate_genes_with_go_and_pathways(ensembl_ids, top_n=10):
+    """Annotate genes with Gene Ontology (GO) terms and pathways using MyGeneInfo.
+    
+    Parameters
+    ----------
+    ensembl_ids : list of str
+        List of Ensembl gene IDs to annotate.
+    top_n : int, optional
+        Number of top shared GO terms and pathways to plot. Default is 10.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame containing annotations for each gene, including:
+        - Ensembl_ID: Ensembl gene ID
+        - Symbol: Gene symbol
+        - Gene_Name: Full gene name
+        - GO_Terms: Semicolon-separated list of GO terms
+        - Pathways: Semicolon-separated list of pathways
+    """
     mg = MyGeneInfo()
     results = []
 
